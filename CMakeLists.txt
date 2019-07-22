@@ -13,6 +13,7 @@ SET(PROJECT_ROOT_PATH ".")
 aux_source_directory(. DIR_SRC)
 
 add_subdirectory(send)
+add_subdirectory(recv)
 add_subdirectory(reactor)
 add_subdirectory(test)
 
