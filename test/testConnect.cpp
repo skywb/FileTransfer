@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
   int port = 8888;
   sockaddr_in addr;
   std::cout << "ip is " << ip << std::endl;
-	int sockfd = connect(ip, port, &addr);
+	int sockfd = Connect(ip, port, &addr);
   while(true) {
     char buf[kMaxLength];
     *(CMD*)buf = kResend;
