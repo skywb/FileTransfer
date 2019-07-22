@@ -1,11 +1,12 @@
 #include "fileSend.h"
-
+#include "send/File.h"
 #include "reactor/Reactor.h"
 
 #include <string.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <thread>
 
 #include <iostream>
 
@@ -34,7 +35,10 @@ int  CalculateMaxPages(std::string file_path) {
 }
 
 bool FileSend(std::string group_ip, 
-              int port, std::string file_path) {
+              int port, std::unique_ptr<File>& file_uptr) {
+  LostPackageVec losts(file_uptr->file_max_packages());
+  //启动一个线程，监听丢失的包
+  std::thread listen(ListenLostPackage, port, losts);
   //加入多播组
   int send_sock;
   send_sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -46,72 +50,46 @@ bool FileSend(std::string group_ip,
   int time_live = kTTL;
   setsockopt(send_sock, IPPROTO_IP, IP_MULTICAST_TTL, 
              (void *)&time_live, sizeof(time_live));
-  //发送文件信息   --- 0号数据包
-  int max_pack_num = 
-    SendFileMessage(send_sock, &mul_addr, file_path);
   //发送文件内容
-  int file_fd = -1;
-  file_fd = open(file_path.c_str(), O_RDONLY);
-  if (file_fd == -1) {
-    std::cerr << "open() error" << std::endl;
-    std::cerr << strerror(errno) << std::endl;
-    exit(1);
-  }
-  lseek(file_fd, 0, SEEK_SET);
-  char buf[kMaxLength+20];
-  //buf[0] = 0;
-  for (int package_number = 1; 
-      package_number <= max_pack_num;
-      ++package_number) {
-    *buf = package_number;
-    int re = read(file_fd, buf+sizeof(package_number), kMaxLength);
-    if (re == -1) {
-      //读错误
-    }
-    sendto(send_sock, buf, re+sizeof(package_number), 0, 
-           (struct sockaddr *)&mul_addr, sizeof(mul_addr));
-    //buf[0] = 0;
-    sleep(1); 
+  for (int i = 0; i <= file_uptr->file_max_packages(); ++i) {
+    SendFileDataAtPackNum(send_sock, &mul_addr, file_uptr, i); 
   }
   //检查所有的丢包情况， 并重发
-  auto reactor = Reactor::GetInstance();
-  /* TODO: 应该从文件路径提取文件名 <19-07-19, sky> */
-  std::string file_name = file_path;
-  auto packages_vec_ptr = reactor->GetFileLostedPackage(file_name);
-  //有需要重发的包
-  while (packages_vec_ptr) {
-    for (auto i : (*packages_vec_ptr)) {
-      if (i) {
-        SendFileDataAtPackNum(send_sock, &mul_addr, file_path, (*packages_vec_ptr).back());
+  while (true) {
+    auto lose = losts.GetFileLostedPackage();
+    if (lose.empty()) {
+      /* TODO:  <22-07-19, 王彬> */
+      //等待并检查
+      //告知子线程结束， 并回收子线程
+      //结束
+      break;
+    } else {
+      //重发 
+      for (auto i : lose) {
+        SendFileDataAtPackNum(send_sock, &mul_addr, file_uptr, i); 
       }
     }
-    packages_vec_ptr = reactor->GetFileLostedPackage(file_name);
   }
-  close(file_fd);
   close(send_sock);
   return true;
 }
 
-
 //计算文件的长度， 想多播组发送包号为0的数据包
-//数据包格式： 包号（2Bytes)文件长度(2Bytes)文件名(小于100Bytes)
-int SendFileMessage(int sockfd, sockaddr_in *addr, 
-                    std::string file_path) {
-  //计算需要总的数据包个数
-  int max_pack_num = CalculateMaxPages(file_path);
+//数据包格式： 包号（4Bytes)文件名长度(4Bytes)文件名(小于100Bytes)
+void SendFileMessage(int sockfd, sockaddr_in *addr, 
+                    const std::unique_ptr<File>& file) {
   //发送文件信息
-  char buf[kMaxLength+20];
-  *(buf) = 0;
-  *(buf+2) = max_pack_num;
+  char buf[kBufSize];
+  *(buf+kPackNumberBeg) = 0;
   char file_name[100];
-  strcpy(file_name, file_path.c_str());
-  ::strncpy(buf+4, file_name, kMaxLength);
-  int send_len = sendto(sockfd, buf, 4+strlen(file_name), 
-                        0, (struct sockaddr *)addr, sizeof(*addr));
+  strcpy(file_name, file->file_name().c_str());
+  *(int*)(buf+kFileNameLenBeg) = file->file_name().size();
+  ::strncpy(buf+kFileNameBeg, file_name, File::kFileNameMaxLen);
+  *(int*)(buf+kFileLenBeg) = file->file_len();
+  int send_len = sendto(sockfd, buf, kFileLenBeg+sizeof(kFileDataLenBeg), 0, (struct sockaddr *)addr, sizeof(*addr));
   if (-1 == send_len) {
     std::cerr << strerror(errno) << std::endl;
   }
-  return max_pack_num;
 }
 
 /*
@@ -119,25 +97,80 @@ int SendFileMessage(int sockfd, sockaddr_in *addr,
  * 若为0号包， 则为文件信息
  * 若包号大于0， 则计算数据在文件的相应位置，并发送
  */
-void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, std::string filename, int package_numbuer) {
+void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, const std::unique_ptr<File>& file, int package_numbuer) {
   if (package_numbuer == 0) {
-    SendFileMessage(sockfd, addr, filename); 
+    SendFileMessage(sockfd, addr, file); 
   } else {
-    int file_fd = -1;
-    file_fd = open(filename.c_str(), O_RDONLY);
-    //计算文件最大的包序号， 防止非法操作
-    //CalculateMaxPages(filename);
-    lseek(file_fd, package_numbuer*kMaxLength, SEEK_SET);
-    char buf[kMaxLength+20];
-    *(int*)buf = package_numbuer;
-    int re = read(file_fd, buf+2, kMaxLength);
-    if (-1 == re) {
-      std::cerr << "read error " << "request package_num is " << package_numbuer  << 
-       " file length is " << lseek(file_fd, 0, SEEK_END) << " kMaxLength is " << kMaxLength << std::endl;
-    } else {
-      sendto(sockfd, buf, re+2, 0, 
-          (struct sockaddr *)&addr, sizeof(*addr));
+    
+    char buf[kBufSize];
+    *(int*)(buf+kPackNumberBeg) = package_numbuer;
+    *(int*)(buf+kFileNameLenBeg) = file->file_name().size();
+    strncpy(buf+kFileNameBeg, file->file_name().c_str(), File::kFileNameMaxLen);
+    int re = file->read(package_numbuer, buf);
+    if (re < 0) {
+      //read error
+    }
+    *(int*)(buf+kFileDataLenBeg) = re;
+    int len = re+kFileDataBeg;
+    re = sendto(sockfd, buf, len, 0, 
+        (struct sockaddr *)&addr, sizeof(*addr));
+    if (re < len) {
+     //error 
+#if DEBUG
+      std::cout << "re < len  in sendto" << std::endl;
+#endif
     }
   }
 }
 
+/* 监听丢失的包
+ * 保存到LostPackageVec中
+ * 线程任务
+ */
+void ListenLostPackage(int port, LostPackageVec& losts) {
+	int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+	sockaddr_in addr;
+	socklen_t len = sizeof(addr);
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(port);
+	if (-1 == bind(sockfd, (sockaddr*)&addr, sizeof(addr))) {
+		std::cerr << "bind error" << std::endl;
+  }
+  char buf[kBufSize];
+	while (true) {
+		int re = recvfrom(sockfd, buf, kBufSize, 0, (sockaddr*)&addr, &len);
+		if (-1 == re) {
+			std::cout << strerror(errno) << std::endl;
+			exit(1);
+		}
+    int cmd = *(int*)buf;
+    int package_num = *(int*)(buf+sizeof(cmd));
+    losts.AddFileLostedRecord(package_num);
+	}
+}
+
+
+LostPackageVec::LostPackageVec (int package_count) : 
+  package_count_(package_count),
+  lost_(package_count_+1) {
+}
+
+LostPackageVec::~LostPackageVec () { }
+
+std::vector<int> LostPackageVec::GetFileLostedPackage() {
+  std::lock_guard<std::mutex> lock(lock_);
+  std::vector<int> res;
+  for (int i = 0; i <= package_count_; ++i) {
+    if (lost_[i]) {
+      res.push_back(i);
+      lost_[i] = false;
+    } 
+  }
+  return res;
+}
+
+void LostPackageVec::AddFileLostedRecord(int package_num) {
+  std::lock_guard<std::mutex> lock(lock_);
+  lost_[package_num] = true;
+}
