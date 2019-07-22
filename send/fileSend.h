@@ -19,22 +19,8 @@ const int kFileLenBeg    = kFileNameBeg+sizeof(kFileNameBeg);
 const int kFileDataLenBeg    = kFileNameBeg+sizeof(kFileNameBeg)+File::kFileNameMaxLen;
 const int kFileDataBeg    = kFileNameBeg+sizeof(kFileDataLenBeg);
 
-
-
-const int kBufSize = kFileDataBeg+kFileDataMaxLength+10;
+const int kBufSize = kFileDataBeg+File::kFileDataMaxLength+10;
 const int kTTL = 64;
-
-//const int kMaxLength = 1000;
-bool FileSend(std::string group_id, int port, std::string file_path);
-//需要提供一个已经绑定过的地址结构和socket套接字， 以及一个文件
-void SendFileMessage(int sockfd, sockaddr_in *addr, const std::unique_ptr<File>& file);
-//需要提供一个已经绑定过的地址结构和socket套接字， 以及一个文件
-void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, const std::unique_ptr<File>& file, int package_numbuer);
-//计算需要多少个数据包
-int  CalculateMaxPages(std::string file_path);
-
-void ListenLostPackage(int port, LostPackageVec& losts);
-
 
 class LostPackageVec
 {
@@ -52,6 +38,15 @@ private:
   std::mutex lock_;
 };
 
-
+//const int kMaxLength = 1000;
+bool FileSend(std::string group_ip, int port, std::unique_ptr<File>& file_uptr);
+//需要提供一个已经绑定过的地址结构和socket套接字， 以及一个文件
+void SendFileMessage(int sockfd, sockaddr_in *addr, const std::unique_ptr<File>& file);
+//需要提供一个已经绑定过的地址结构和socket套接字， 以及一个文件
+void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, const std::unique_ptr<File>& file, int package_numbuer);
+//计算需要多少个数据包    --- 弃用
+//int  CalculateMaxPages(std::string file_path);
+//监听接收端丢失的包   --- 线程回调函数
+void ListenLostPackage(int port, LostPackageVec& losts);
 
 #endif /* end of include guard: FILESEND_H_HMY0LJA6 */

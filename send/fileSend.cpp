@@ -10,30 +10,36 @@
 
 #include <iostream>
 
-/*
- * 打开文件， 计算文件的长度
- * 需要的数据包个数  =  文件长度/一个数据包中最大的数据长度(kMaxLength)
- * 返回需要的数据包个数
- */
-int  CalculateMaxPages(std::string file_path) {
-  int file_fd = -1;
-  file_fd = open(file_path.c_str(), O_RDONLY);
-  if (file_fd == -1) {
-    std::cerr << "open() error" << std::endl;
-    std::cerr << strerror(errno) << std::endl;
-    exit(1);
-  }
-  lseek(file_fd, 0, SEEK_SET);
-  int file_len = lseek(file_fd, 0, SEEK_END);
-  close(file_fd);
-  //计算需要总的数据包个数
-  int max_pack_num = file_len/1000;
-  if (max_pack_num * 10000 < file_len) {
-    max_pack_num++;
-  }
-  return max_pack_num;
-}
+///*   弃用
+// * 打开文件， 计算文件的长度
+// * 需要的数据包个数  =  文件长度/一个数据包中最大的数据长度(kMaxLength)
+// * 返回需要的数据包个数
+// */
+//int  CalculateMaxPages(std::string file_path) {
+//  int file_fd = -1;
+//  file_fd = open(file_path.c_str(), O_RDONLY);
+//  if (file_fd == -1) {
+//    std::cerr << "open() error" << std::endl;
+//    std::cerr << strerror(errno) << std::endl;
+//    exit(1);
+//  }
+//  lseek(file_fd, 0, SEEK_SET);
+//  int file_len = lseek(file_fd, 0, SEEK_END);
+//  close(file_fd);
+//  //计算需要总的数据包个数
+//  int max_pack_num = file_len/1000;
+//  if (max_pack_num * 10000 < file_len) {
+//    max_pack_num++;
+//  }
+//  return max_pack_num;
+//}
 
+/*
+ * 文件的发送
+ * 根据传入的组播地址和端口， 绑定之后发送文件
+ * 会启动一个线程去监听客户端丢失的udp包， 最后检查所有的丢失的包，再次发送
+ * 等待一定的时间，防止无效的报文到达
+ */
 bool FileSend(std::string group_ip, 
               int port, std::unique_ptr<File>& file_uptr) {
   LostPackageVec losts(file_uptr->file_max_packages());
@@ -62,7 +68,11 @@ bool FileSend(std::string group_ip,
       //等待并检查
       //告知子线程结束， 并回收子线程
       //结束
-      break;
+      //简单代替， 应修改
+      const int kSleepTime = 3;
+      sleep(kSleepTime);
+      lose = losts.GetFileLostedPackage();
+      if (lose.empty()) { break; }
     } else {
       //重发 
       for (auto i : lose) {
@@ -158,6 +168,9 @@ LostPackageVec::LostPackageVec (int package_count) :
 
 LostPackageVec::~LostPackageVec () { }
 
+/*
+ * 获取丢失的包的集合， 返回一个vector
+ */
 std::vector<int> LostPackageVec::GetFileLostedPackage() {
   std::lock_guard<std::mutex> lock(lock_);
   std::vector<int> res;
@@ -170,6 +183,7 @@ std::vector<int> LostPackageVec::GetFileLostedPackage() {
   return res;
 }
 
+//添加一个丢失记录
 void LostPackageVec::AddFileLostedRecord(int package_num) {
   std::lock_guard<std::mutex> lock(lock_);
   lost_[package_num] = true;
