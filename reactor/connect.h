@@ -6,6 +6,6 @@
 #include <iostream>
 #include <string>
 
-int connect(std::string& ip, int& port, sockaddr_in* addr);
+int Connect(std::string& ip, int& port, sockaddr_in* addr);
 
 #endif /* end of include guard: CONNECT_H_K6BGX7EA */

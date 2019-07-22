@@ -4,6 +4,8 @@
 #include <sys/epoll.h>
 #include <netinet/ip.h>
 
+#include "send/File.h"
+
 #include <memory>
 #include <map>
 #include <vector>
@@ -32,6 +34,8 @@ private:
 	sockaddr_in addr_;
   std::map<std::string, 
     std::unique_ptr<std::vector<bool>>> file_losted_package_;
+  std::map<std::string, 
+    std::weak_ptr<File>> fileName_map_File_;
   std::mutex lock_file_losted_package_; 
 };
 

@@ -7,14 +7,13 @@
 #include <cstring>
 void joinGroup();
 
-int connect(std::string& ip, int& port, sockaddr_in* addr) {
+int Connect(std::string& ip, int& port, sockaddr_in* addr) {
 	int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	addr->sin_port = htons(8888);
 	addr->sin_family = AF_INET;
 	inet_pton(AF_INET, ip.c_str(), &addr->sin_addr);
 	const int kBufSize = 1000;
 	char buf[kBufSize];
-  CMD cmd = kUnavailable;
 	*(CMD*)buf = kRequest;
 	int re = sendto(sockfd, buf, sizeof(CMD), 0, (sockaddr*)addr, sizeof(*addr));
 	if (-1 == re) {
