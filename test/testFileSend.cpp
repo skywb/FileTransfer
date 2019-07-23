@@ -2,9 +2,8 @@
 
 int main(int argc, char *argv[])
 {
-	
-	FileSend(argv[1], atoi(argv[2]), argv[3]);
-	
+  auto file = std::make_unique<File> ("testFile");
+  FileSend("224.0.0.11", 8888, file);
 	return 0;
 }
 
