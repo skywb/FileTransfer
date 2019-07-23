@@ -42,9 +42,9 @@
  */
 bool FileSend(std::string group_ip, 
               int port, std::unique_ptr<File>& file_uptr) {
-  LostPackageVec losts(file_uptr->file_max_packages());
+  LostPackageVec losts(file_uptr->File_max_packages());
   //启动一个线程，监听丢失的包
-  std::thread listen(ListenLostPackage, port, losts);
+  std::thread listen(ListenLostPackage, port+1, std::ref(losts));
   //加入多播组
   int send_sock;
   send_sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -57,9 +57,15 @@ bool FileSend(std::string group_ip,
   setsockopt(send_sock, IPPROTO_IP, IP_MULTICAST_TTL, 
              (void *)&time_live, sizeof(time_live));
   //发送文件内容
-  for (int i = 0; i <= file_uptr->file_max_packages(); ++i) {
+  for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
     SendFileDataAtPackNum(send_sock, &mul_addr, file_uptr, i); 
+    #if DEBUG
+    std::cout << "发送成功" << std::endl;
+    #endif
   }
+#if DEBUG
+  std::cout << "发送完毕, 开始校验" << std::endl;
+#endif
   //检查所有的丢包情况， 并重发
   while (true) {
     auto lose = losts.GetFileLostedPackage();
@@ -72,7 +78,10 @@ bool FileSend(std::string group_ip,
       const int kSleepTime = 3;
       sleep(kSleepTime);
       lose = losts.GetFileLostedPackage();
-      if (lose.empty()) { break; }
+      if (lose.empty()) { 
+        losts.ExitListen();
+        break; 
+      }
     } else {
       //重发 
       for (auto i : lose) {
@@ -80,7 +89,11 @@ bool FileSend(std::string group_ip,
       }
     }
   }
+#if DEBUG
+  std::cout << "结束" << std::endl;
+#endif
   close(send_sock);
+  listen.join();
   return true;
 }
 
@@ -91,12 +104,13 @@ void SendFileMessage(int sockfd, sockaddr_in *addr,
   //发送文件信息
   char buf[kBufSize];
   *(buf+kPackNumberBeg) = 0;
+  *(buf+kFileNameLenBeg) = file->File_name().size();
   char file_name[100];
-  strcpy(file_name, file->file_name().c_str());
-  *(int*)(buf+kFileNameLenBeg) = file->file_name().size();
+  strcpy(file_name, file->File_name().c_str());
   ::strncpy(buf+kFileNameBeg, file_name, File::kFileNameMaxLen);
-  *(int*)(buf+kFileLenBeg) = file->file_len();
+  *(int*)(buf+kFileLenBeg) = file->File_len();
   int send_len = sendto(sockfd, buf, kFileLenBeg+sizeof(kFileDataLenBeg), 0, (struct sockaddr *)addr, sizeof(*addr));
+  std::cout << "pack " <<  *(int*)(buf+kPackNumberBeg) << std::endl;
   if (-1 == send_len) {
     std::cerr << strerror(errno) << std::endl;
   }
@@ -114,20 +128,22 @@ void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, const std::unique_ptr<
     
     char buf[kBufSize];
     *(int*)(buf+kPackNumberBeg) = package_numbuer;
-    *(int*)(buf+kFileNameLenBeg) = file->file_name().size();
-    strncpy(buf+kFileNameBeg, file->file_name().c_str(), File::kFileNameMaxLen);
-    int re = file->read(package_numbuer, buf);
+    *(int*)(buf+kFileNameLenBeg) = file->File_name().size();
+    strncpy(buf+kFileNameBeg, file->File_name().c_str(), File::kFileNameMaxLen);
+    int re = file->Read(package_numbuer, buf);
     if (re < 0) {
       //read error
     }
     *(int*)(buf+kFileDataLenBeg) = re;
     int len = re+kFileDataBeg;
     re = sendto(sockfd, buf, len, 0, 
-        (struct sockaddr *)&addr, sizeof(*addr));
+        (sockaddr *)addr, sizeof(*addr));
     if (re < len) {
      //error 
+      std::cerr << strerror(errno) << std::endl;
+      std::cout << "re is " << re << std::endl;
 #if DEBUG
-      std::cout << "re < len  in sendto" << std::endl;
+      std::cout << "re < len  in sendto " << __FILE__  << std::endl;
 #endif
     }
   }
@@ -148,22 +164,27 @@ void ListenLostPackage(int port, LostPackageVec& losts) {
 		std::cerr << "bind error" << std::endl;
   }
   char buf[kBufSize];
-	while (true) {
-		int re = recvfrom(sockfd, buf, kBufSize, 0, (sockaddr*)&addr, &len);
-		if (-1 == re) {
-			std::cout << strerror(errno) << std::endl;
-			exit(1);
-		}
-    int cmd = *(int*)buf;
-    int package_num = *(int*)(buf+sizeof(cmd));
-    losts.AddFileLostedRecord(package_num);
+  timeval listen_time;
+  fd_set rd_fd;
+  FD_ZERO(&rd_fd);
+  FD_SET(sockfd, &rd_fd);
+	while (losts.isRunning()) {
+    listen_time.tv_sec = 1;
+    listen_time.tv_usec = 0;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&listen_time, sizeof(timeval));
+    int re = recvfrom(sockfd, buf, kBufSize, 0, (sockaddr*)&addr, &len);
+    if (re > 0 && FD_ISSET(sockfd, &rd_fd)) {
+      int cmd = *(int*)buf;
+      int package_num = *(int*)(buf+sizeof(cmd));
+      losts.AddFileLostedRecord(package_num);
+    }
 	}
 }
 
 
 LostPackageVec::LostPackageVec (int package_count) : 
   package_count_(package_count),
-  lost_(package_count_+1) {
+  lost_(package_count_+1), running(true) {
 }
 
 LostPackageVec::~LostPackageVec () { }
@@ -187,4 +208,16 @@ std::vector<int> LostPackageVec::GetFileLostedPackage() {
 void LostPackageVec::AddFileLostedRecord(int package_num) {
   std::lock_guard<std::mutex> lock(lock_);
   lost_[package_num] = true;
+}
+  //尝试退出子线程, 若没有数据包
+  //若没有数据包，则退出子线程，并返回true
+  //否则返回false
+bool LostPackageVec::ExitListen() {
+  std::lock_guard<std::mutex> lock(lock_);
+  running = false;
+  return true; 
+}
+bool LostPackageVec::isRunning() {
+  std::lock_guard<std::mutex> lock(lock_);
+  return  running;
 }

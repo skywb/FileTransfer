@@ -31,11 +31,17 @@ public:
   std::vector<int> GetFileLostedPackage();
   //添加一个丢失记录
   void AddFileLostedRecord(int package_num);
+  //尝试退出子线程, 若没有数据包
+  //若没有数据包，则退出子线程，并返回true
+  //否则返回false
+  bool ExitListen();
+  bool isRunning();
 
 private:
   int package_count_;    //包数量
   std::vector<bool> lost_;  //丢失记录
   std::mutex lock_;
+  bool running;
 };
 
 //const int kMaxLength = 1000;
