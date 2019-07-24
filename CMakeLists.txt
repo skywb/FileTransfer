@@ -14,7 +14,7 @@ aux_source_directory(. DIR_SRC)
 
 add_subdirectory(send)
 add_subdirectory(recv)
-#add_subdirectory(reactor)
+add_subdirectory(util)
 add_subdirectory(test)
 
 

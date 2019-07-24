@@ -10,14 +10,14 @@
 #include <mutex>
 
 const int kPackNumberBeg  = 0;
-const int kFileNameLenBeg = sizeof(kPackNumberBeg);
+const int kFileNameLenBeg = kPackNumberBeg+sizeof(kPackNumberBeg);
 const int kFileNameBeg    = kFileNameLenBeg+sizeof(kFileNameLenBeg);
 
 //文件长度
 const int kFileLenBeg    = kFileNameBeg+sizeof(kFileNameBeg);
 
-const int kFileDataLenBeg    = kFileNameBeg+sizeof(kFileNameBeg)+File::kFileNameMaxLen;
-const int kFileDataBeg    = kFileNameBeg+sizeof(kFileDataLenBeg);
+const int kFileDataLenBeg    = kFileNameBeg+File::kFileNameMaxLen;
+const int kFileDataBeg    = kFileDataLenBeg+sizeof(kFileDataLenBeg);
 
 const int kBufSize = kFileDataBeg+File::kFileDataMaxLength+10;
 const int kTTL = 64;

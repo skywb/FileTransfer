@@ -9,5 +9,6 @@
 //传入一个绑定过的套接字和对应的组播地址
 //接收数据并写入文件
 void FileRecv (const int sockfd, const sockaddr_in* addr, std::unique_ptr<File>& file_uptr);
+bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr);
 
 #endif /* end of include guard: FILERECV_H_9Y46TCUG */

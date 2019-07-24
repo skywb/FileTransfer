@@ -1,6 +1,7 @@
 #include "fileSend.h"
 #include "send/File.h"
 #include "reactor/Reactor.h"
+#include "util/multicastUtil.h"
 
 #include <string.h>
 #include <fcntl.h>
@@ -9,30 +10,6 @@
 #include <thread>
 
 #include <iostream>
-
-///*   弃用
-// * 打开文件， 计算文件的长度
-// * 需要的数据包个数  =  文件长度/一个数据包中最大的数据长度(kMaxLength)
-// * 返回需要的数据包个数
-// */
-//int  CalculateMaxPages(std::string file_path) {
-//  int file_fd = -1;
-//  file_fd = open(file_path.c_str(), O_RDONLY);
-//  if (file_fd == -1) {
-//    std::cerr << "open() error" << std::endl;
-//    std::cerr << strerror(errno) << std::endl;
-//    exit(1);
-//  }
-//  lseek(file_fd, 0, SEEK_SET);
-//  int file_len = lseek(file_fd, 0, SEEK_END);
-//  close(file_fd);
-//  //计算需要总的数据包个数
-//  int max_pack_num = file_len/1000;
-//  if (max_pack_num * 10000 < file_len) {
-//    max_pack_num++;
-//  }
-//  return max_pack_num;
-//}
 
 /*
  * 文件的发送
@@ -45,23 +22,29 @@ bool FileSend(std::string group_ip,
   LostPackageVec losts(file_uptr->File_max_packages());
   //启动一个线程，监听丢失的包
   std::thread listen(ListenLostPackage, port+1, std::ref(losts));
-  //加入多播组
+  //设置多播地址
   int send_sock;
-  send_sock = socket(AF_INET, SOCK_DGRAM, 0);
+  //send_sock = socket(AF_INET, SOCK_DGRAM, 0);
   struct sockaddr_in mul_addr;
-  memset(&mul_addr, 0, sizeof(mul_addr));
-  mul_addr.sin_family = AF_INET;
-  mul_addr.sin_addr.s_addr = inet_addr(group_ip.c_str());
-  mul_addr.sin_port = htons(port);
+  if(false == JoinGroup(&mul_addr, &send_sock, group_ip, port)) {
+    std::cout << "加入组播组失败" << std::endl;
+    //临时做退出处理
+    exit(1);
+  }
+  //memset(&mul_addr, 0, sizeof(mul_addr));
+  //mul_addr.sin_family = AF_INET;
+  //mul_addr.sin_addr.s_addr = inet_addr(group_ip.c_str());
+  //mul_addr.sin_port = htons(port);
+
   int time_live = kTTL;
   setsockopt(send_sock, IPPROTO_IP, IP_MULTICAST_TTL, 
              (void *)&time_live, sizeof(time_live));
   //发送文件内容
   for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
     SendFileDataAtPackNum(send_sock, &mul_addr, file_uptr, i); 
-    #if DEBUG
+#if DEBUG
     std::cout << "发送成功" << std::endl;
-    #endif
+#endif
   }
 #if DEBUG
   std::cout << "发送完毕, 开始校验" << std::endl;
@@ -103,14 +86,13 @@ void SendFileMessage(int sockfd, sockaddr_in *addr,
                     const std::unique_ptr<File>& file) {
   //发送文件信息
   char buf[kBufSize];
-  *(buf+kPackNumberBeg) = 0;
+  *(int*)(buf+kPackNumberBeg) = (int)0;
   *(buf+kFileNameLenBeg) = file->File_name().size();
   char file_name[100];
   strcpy(file_name, file->File_name().c_str());
   ::strncpy(buf+kFileNameBeg, file_name, File::kFileNameMaxLen);
   *(int*)(buf+kFileLenBeg) = file->File_len();
   int send_len = sendto(sockfd, buf, kFileLenBeg+sizeof(kFileDataLenBeg), 0, (struct sockaddr *)addr, sizeof(*addr));
-  std::cout << "pack " <<  *(int*)(buf+kPackNumberBeg) << std::endl;
   if (-1 == send_len) {
     std::cerr << strerror(errno) << std::endl;
   }
@@ -125,12 +107,12 @@ void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, const std::unique_ptr<
   if (package_numbuer == 0) {
     SendFileMessage(sockfd, addr, file); 
   } else {
-    
     char buf[kBufSize];
     *(int*)(buf+kPackNumberBeg) = package_numbuer;
     *(int*)(buf+kFileNameLenBeg) = file->File_name().size();
     strncpy(buf+kFileNameBeg, file->File_name().c_str(), File::kFileNameMaxLen);
-    int re = file->Read(package_numbuer, buf);
+    std::cout << "package_numbuer is " << package_numbuer << std::endl;
+    int re = file->Read(package_numbuer, buf+kFileDataBeg);
     if (re < 0) {
       //read error
     }
