@@ -143,7 +143,9 @@ void ListenLostPackage(int port, LostPackageVec& losts) {
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	if (-1 == bind(sockfd, (sockaddr*)&addr, sizeof(addr))) {
-		std::cerr << "bind error" << std::endl;
+		std::cerr << "bind error in file " << __FILE__ << std::endl;
+    std::cout << strerror(errno) << std::endl;
+    ::pthread_exit(nullptr);
   }
   char buf[kBufSize];
   timeval listen_time;

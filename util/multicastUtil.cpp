@@ -14,7 +14,7 @@ bool JoinGroup (sockaddr_in* addr, int* sockfd, std::string group_ip, int port){
   // sockfd为需要端口复用的套接字
   setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&opt, sizeof(opt));
   if(bind(*sockfd, (sockaddr *)addr, sizeof(*addr)) == -1) {
-    std::cerr << "bind() error" << std::endl;
+    std::cerr << "bind() error in file " << __FILE__ << std::endl;
     std::cout << strerror(errno) << std::endl;
     exit(1);
   }
