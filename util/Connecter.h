@@ -17,10 +17,11 @@ public:
   int Recv(char* buf, int len, int timeout);
   int Send(char* buf, int len);
 private:
-  std::vector<std::pair<int, sockaddr_in*>> addrs_;
+  std::vector<int> sockets;
   int epoll_root_;
   epoll_event event_;
   std::mutex lock_;
+  sockaddr_in addr_;
 };
 
 #endif /* end of include guard: CONNECTER_H_7LVEHFUI */
