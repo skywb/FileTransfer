@@ -1,5 +1,4 @@
 #include "multicastUtil.h"
-#include "ipSearch.h"
 
 #include <arpa/inet.h>
 #include <cstring>
@@ -9,28 +8,30 @@
 #include <ifaddrs.h>  
 
 
-bool JoinGroup (sockaddr_in* addr, int* sockfd, std::string group_ip, int port){
-  std::string ip_local = Ip_search();
-  if (ip_local.empty()) ip_local = "172.18.146.35";
-  std::cout << "ip is " << ip_local << std::endl;
+bool JoinGroup (sockaddr_in* addr, int* sockfd, std::string group_ip, int port, std::string netcard_ip){
   ip_mreq join_adr;
 	*sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	addr->sin_port = htons(port);
 	addr->sin_family = AF_INET;
-  //addr->sin_addr.s_addr = htonl(INADDR_ANY);
-  addr->sin_addr.s_addr =inet_addr(ip_local.c_str());
+  addr->sin_addr.s_addr =inet_addr(netcard_ip.c_str());
   //int opt = 1;
   //// sockfd为需要端口复用的套接字
   //setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&opt, sizeof(opt));
   if(bind(*sockfd, (sockaddr *)addr, sizeof(*addr)) == -1) {
-    std::cerr << "bind() error in file " << __FILE__ << std::endl;
-    std::cout << strerror(errno) << std::endl;
-    exit(1);
+    //std::cout << netcard_ip << std::endl;
+    //std::cerr << "bind() error in file " << __FILE__ << std::endl;
+    //std::cout << strerror(errno) << std::endl;
+    *sockfd = -1;
+    close(*sockfd);
+    return false;
+    //exit(1);
   }
   join_adr.imr_multiaddr.s_addr = inet_addr(group_ip.c_str());
-  join_adr.imr_interface.s_addr = inet_addr(ip_local.c_str());
+  join_adr.imr_interface.s_addr = inet_addr(netcard_ip.c_str());
   setsockopt(*sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void *)&join_adr, sizeof(join_adr));
-  return true;
+  unsigned long if_addr = inet_addr(netcard_ip.c_str());
+  int ret = setsockopt(*sockfd, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&if_addr, sizeof(if_addr));
+  addr->sin_addr.s_addr = inet_addr(group_ip.c_str());
 }
 
 //返回所有网卡IP列表

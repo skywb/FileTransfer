@@ -6,7 +6,7 @@
 #include <vector>
 #include <string>
 
-bool JoinGroup(sockaddr_in* addr, int* sockfd, std::string group_ip, int port);
+bool JoinGroup(sockaddr_in* addr, int* sockfd, std::string group_ip, int port, std::string netcard_ip);
 
 std::vector<std::string> GetAllNetIP();
 
