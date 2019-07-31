@@ -15,16 +15,6 @@ FileSendControl::FileSendControl (std::string group_ip, int port) :
     exit(1);
   }
   ip_used_[ip_local-kMulticastIpMin] = true;
-  //auto ip_vec = GetAllNetIP();
-  //for (auto ip : ip_vec) {
-  //  auto addr = new sockaddr_in();
-  //  int sockfd;
-  //  if(JoinGroup(addr, &sockfd, group_ip, port, ip)) {
-  //    group_addrs.push_back(std::make_pair(sockfd, addr));
-  //  } else {
-  //    std::cout << ip << " 绑定失败" << std::endl;
-  //  }
-  //}
 }
 
 FileSendControl::~FileSendControl () {
@@ -119,7 +109,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   while (true) {
     int cnt = con.Recv(buf, kBufSize, 3000);
     if (cnt == -1) {
-      //std::cout << "超时没消息" << std::endl;
+      std::cout << "超时没消息" << std::endl;
       continue;
     } else {
       std::cout << "新消息 " << cnt  << std::endl;
