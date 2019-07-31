@@ -2,8 +2,10 @@
 #include "send/fileSend.h"
 #include "reactor/CMD.h"
 #include "util/multicastUtil.h"
+#include "util/Connecter.h"
 
 #include <cstring>
+#include <sys/epoll.h>
 #include <fcntl.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
@@ -17,43 +19,23 @@
 // * 计算平均传输时间， 设置定时器， 当超过两倍时间没有发送时， 发送丢包重传请求
 // */
 bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) {
-  sockaddr_in addr;
-  //ip_mreq join_adr;
-	int sockfd; //= socket(AF_INET, SOCK_DGRAM, 0);
-  if (false == JoinGroup(&addr, &sockfd, group_ip, port)) {
-    std::cout << "加入组播组失败" << std::endl;
-    exit(1);
-  }
+  Connecter con(group_ip, port);
   //接收缓冲区
   char buf[kBufSize];
   //接收的长度
   int recv_len = 0;
   //分别上一个包到来时间，本次到来时间， 差值， 以及平均时间
-  timeval pre_time, cur_time, sub_time, avg_time;
-  //设置默认等待时间
-  fd_set rd_fd;
-  //检查的包序号
+  //timeval pre_time, cur_time, sub_time, avg_time;
+  ////设置默认等待时间
+  //fd_set rd_fd;
+  ////检查的包序号
   int max_pack_num = 0, check_package_num = 0;
   for (int i = 0; ; ++i) {
-    avg_time.tv_sec = 3;
-    avg_time.tv_usec = 0;
-    FD_ZERO(&rd_fd);
-    FD_SET(sockfd, &rd_fd);
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&avg_time, sizeof(timeval));
-    recv_len = recvfrom(sockfd, buf, File::kMaxLength, 0, NULL, 0);
-    if (recv_len != 0 && FD_ISSET(sockfd, &rd_fd)) {
+    int re = con.Recv(buf, File::kMaxLength, 3000);
+    //recv_len = recvfrom(sockfd, buf, File::kMaxLength, 0, NULL, 0);
+    if (re > 0) {
       //数据到来
-      std::cout << recv_len << std::endl;
-#if DEBUG
-      std::cout << "recv" << std::endl;
-#endif
-      if (recv_len < 0) {
-        /* TODO: 
-         * 校验文件 <22-07-19, 王彬> */
-        //接收错误
-        break;
-      }
-      buf[recv_len] = 0;
+      buf[re] = 0;
       int pack_num = *(int*)(buf+kPackNumberBeg);
 #if DEBUG
       std::cout << "pack_num = " <<  pack_num << std::endl;

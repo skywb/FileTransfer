@@ -5,6 +5,7 @@
 #include "util/multicastUtil.h"
 #include "send/fileSend.h"
 #include "recv/fileRecv.h"
+#include "util/Connecter.h"
 
 #include <cstring>
 #include <arpa/inet.h>
@@ -49,9 +50,9 @@ public:
   bool Quit() = delete ;
 private:
   FileSendControl (std::string group_ip, int port);
-  static void ListenFileRecvCallback(std::vector<std::pair<int, sockaddr_in*>> sock_vec);
+  static void ListenFileRecvCallback(Connecter& con);
   static void FileSendCallback(uint32_t group_ip_net, int port_local, std::unique_ptr<File> file);
-  static void RecvFile(std::string group_ip, int port, std::unique_ptr<File>& file_uptr);
+  static void RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr);
   std::queue<std::unique_ptr<File>> task_que_;
   std::mutex mutex_;
   std::string group_ip_;
@@ -63,7 +64,8 @@ private:
   //std::string save_path_;
   //sockaddr_in group_addr;
   //int group_sockfd;
-  std::vector<std::pair<int, sockaddr_in*>> group_addrs;
+  //std::vector<std::pair<int, sockaddr_in*>> group_addrs;
+  Connecter con;
 };
 
 

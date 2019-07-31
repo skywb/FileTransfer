@@ -2,8 +2,10 @@
 #include "send/File.h"
 #include "reactor/Reactor.h"
 #include "util/multicastUtil.h"
+#include "util/Connecter.h"
 
 #include <string.h>
+#include <sys/epoll.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -16,32 +18,31 @@
  * 根据传入的组播地址和端口， 绑定之后发送文件
  * 会启动一个线程去监听客户端丢失的udp包， 最后检查所有的丢失的包，再次发送
  * 等待一定的时间，防止无效的报文到达
+ * 获取所有网卡绑定的IP，并创建套接字
+ * 想每个网卡发送相同的信息
  */
 bool FileSend(std::string group_ip, 
               int port, std::unique_ptr<File>& file_uptr) {
+  //auto ip_vec = GetAllNetIP();
+  //std::vector<std::pair<int, sockaddr_in*>> addrs(ip_vec.size());
+  //for (int i = 0; i < ip_vec.size(); ++i) {
+  //  addrs[i].second = new sockaddr_in();
+  //  JoinGroup(addrs[i].second, &addrs[i].first, group_ip, port, group_ip);
+  //}
+  Connecter con(group_ip, port);
   LostPackageVec losts(file_uptr->File_max_packages());
   //启动一个线程，监听丢失的包
-  std::thread listen(ListenLostPackage, port+1, std::ref(losts));
+  std::thread listen(ListenLostPackage, port+1, std::ref(losts), std::ref(con)); //修改端口， 参数： socket， addr, losts
   //设置多播地址
-  int send_sock;
-  //send_sock = socket(AF_INET, SOCK_DGRAM, 0);
-  struct sockaddr_in mul_addr;
-  if(false == JoinGroup(&mul_addr, &send_sock, group_ip, port)) {
-    std::cout << "加入组播组失败" << std::endl;
-    //临时做退出处理
-    exit(1);
-  }
-  //memset(&mul_addr, 0, sizeof(mul_addr));
-  //mul_addr.sin_family = AF_INET;
-  //mul_addr.sin_addr.s_addr = inet_addr(group_ip.c_str());
-  //mul_addr.sin_port = htons(port);
-
-  int time_live = kTTL;
-  setsockopt(send_sock, IPPROTO_IP, IP_MULTICAST_TTL, 
-             (void *)&time_live, sizeof(time_live));
   //发送文件内容
   for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
-    SendFileDataAtPackNum(send_sock, &mul_addr, file_uptr, i); 
+    //for (auto addr : addrs) {
+    //  //int time_live = kTTL;
+    //  //setsockopt(addr.first, IPPROTO_IP, IP_MULTICAST_TTL, 
+    //  //    (void *)&time_live, sizeof(time_live));
+    //  SendFileDataAtPackNum(addr.first, addr.second, file_uptr, i); 
+    //}
+    SendFileDataAtPackNum(con, file_uptr, i); 
 #if DEBUG
     std::cout << "发送成功" << std::endl;
 #endif
@@ -68,22 +69,30 @@ bool FileSend(std::string group_ip,
     } else {
       //重发 
       for (auto i : lose) {
-        SendFileDataAtPackNum(send_sock, &mul_addr, file_uptr, i); 
+        //for (auto addr : addrs) {
+        //  //int time_live = kTTL;
+        //  //setsockopt(addr.first, IPPROTO_IP, IP_MULTICAST_TTL, 
+        //  //    (void *)&time_live, sizeof(time_live));
+        //  SendFileDataAtPackNum(addr.first, addr.second, file_uptr, i); 
+        //}
+        SendFileDataAtPackNum(con, file_uptr, i); 
       }
     }
   }
 #if DEBUG
   std::cout << "结束" << std::endl;
 #endif
-  close(send_sock);
   listen.join();
+  //for (auto i : addrs) {
+  //  close(i.first);
+  //  delete i.second;
+  //}
   return true;
 }
 
 //计算文件的长度， 想多播组发送包号为0的数据包
 //数据包格式： 包号（4Bytes)文件名长度(4Bytes)文件名(小于100Bytes)
-void SendFileMessage(int sockfd, sockaddr_in *addr, 
-                    const std::unique_ptr<File>& file) {
+void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
   //发送文件信息
   char buf[kBufSize];
   *(int*)(buf+kPackNumberBeg) = (int)0;
@@ -92,10 +101,11 @@ void SendFileMessage(int sockfd, sockaddr_in *addr,
   strcpy(file_name, file->File_name().c_str());
   ::strncpy(buf+kFileNameBeg, file_name, File::kFileNameMaxLen);
   *(int*)(buf+kFileLenBeg) = file->File_len();
-  int send_len = sendto(sockfd, buf, kFileLenBeg+sizeof(kFileDataLenBeg), 0, (struct sockaddr *)addr, sizeof(*addr));
-  if (-1 == send_len) {
-    std::cerr << strerror(errno) << std::endl;
-  }
+  con.Send(buf, kFileLenBeg+sizeof(kFileDataLenBeg));
+  //int send_len = sendto(sockfd, buf, kFileLenBeg+sizeof(kFileDataLenBeg), 0, (struct sockaddr *)addr, sizeof(*addr));
+  //if (-1 == send_len) {
+  //  std::cerr << strerror(errno) << std::endl;
+  //}
 }
 
 /*
@@ -103,9 +113,9 @@ void SendFileMessage(int sockfd, sockaddr_in *addr,
  * 若为0号包， 则为文件信息
  * 若包号大于0， 则计算数据在文件的相应位置，并发送
  */
-void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, const std::unique_ptr<File>& file, int package_numbuer) {
+void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer) {
   if (package_numbuer == 0) {
-    SendFileMessage(sockfd, addr, file); 
+    SendFileMessage(con, file); 
   } else {
     char buf[kBufSize];
     *(int*)(buf+kPackNumberBeg) = package_numbuer;
@@ -118,8 +128,9 @@ void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, const std::unique_ptr<
     }
     *(int*)(buf+kFileDataLenBeg) = re;
     int len = re+kFileDataBeg;
-    re = sendto(sockfd, buf, len, 0, 
-        (sockaddr *)addr, sizeof(*addr));
+    re = con.Send(buf, len);
+    //re = sendto(sockfd, buf, len, 0, 
+    //    (sockaddr *)addr, sizeof(*addr));
     if (re < len) {
      //error 
       std::cerr << strerror(errno) << std::endl;
@@ -135,29 +146,37 @@ void SendFileDataAtPackNum(int sockfd, sockaddr_in *addr, const std::unique_ptr<
  * 保存到LostPackageVec中
  * 线程任务
  */
-void ListenLostPackage(int port, LostPackageVec& losts) {
-	int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	sockaddr_in addr;
-	socklen_t len = sizeof(addr);
-	addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	addr.sin_family = AF_INET;
-	addr.sin_port = htons(port);
-	if (-1 == bind(sockfd, (sockaddr*)&addr, sizeof(addr))) {
-		std::cerr << "bind error in file " << __FILE__ << std::endl;
-    std::cout << strerror(errno) << std::endl;
-    ::pthread_exit(nullptr);
-  }
+void ListenLostPackage(int port, LostPackageVec& losts, Connecter& con) {
   char buf[kBufSize];
-  timeval listen_time;
-  fd_set rd_fd;
-  FD_ZERO(&rd_fd);
-  FD_SET(sockfd, &rd_fd);
+  //int epoll_root = epoll_create(10);
+  //epoll_event events[addrs.size()];
+  //for (auto i : addrs) {
+  //  events[0].data.fd =i.first;
+  //  events[0].events = EPOLLIN;
+  //  epoll_ctl(epoll_root, EPOLL_CTL_ADD,i.first, &events[0]);
+  //}
+  //timeval listen_time;
+  //fd_set rd_fd;
+  //FD_ZERO(&rd_fd);
+  //FD_SET(sockfd, &rd_fd);
 	while (losts.isRunning()) {
-    listen_time.tv_sec = 1;
-    listen_time.tv_usec = 0;
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&listen_time, sizeof(timeval));
-    int re = recvfrom(sockfd, buf, kBufSize, 0, (sockaddr*)&addr, &len);
-    if (re > 0 && FD_ISSET(sockfd, &rd_fd)) {
+    //listen_time.tv_sec = 1;
+    //listen_time.tv_usec = 0;
+    //setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&listen_time, sizeof(timeval));
+    //int re = recvfrom(sockfd, buf, kBufSize, 0, (sockaddr*)&addr, &len);
+    //int cnt = epoll_wait(epoll_root, events, addrs.size(), 1);
+    //if (cnt > 0) {
+    //  for (int i = 0; i < cnt; ++i) {
+    //    int re = recvfrom(events[i].data.fd, buf, kBufSize, 0, nullptr, nullptr);
+    //    if (re > 0) {
+    //      int cmd = *(int*)buf;
+    //      int package_num = *(int*)(buf+sizeof(cmd));
+    //      losts.AddFileLostedRecord(package_num);
+    //    }
+    //  }
+    //}
+    int re = con.Recv(buf, kBufSize, 1000);
+    if (re > 0) {
       int cmd = *(int*)buf;
       int package_num = *(int*)(buf+sizeof(cmd));
       losts.AddFileLostedRecord(package_num);

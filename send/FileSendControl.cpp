@@ -5,7 +5,8 @@
 
 FileSendControl::FileSendControl (std::string group_ip, int port) :
                                   group_ip_(group_ip), port_(port),
-                                  ip_used_(1000, false), running_(false) {
+                                  ip_used_(1000, false), running_(false),
+                                  con(group_ip, port) {
   auto ip_net = inet_addr(group_ip_.c_str()); 
   auto ip_local = ntohl(ip_net);
   if (ip_local < kMulticastIpMin || ip_local > kMulticastIpMax) {
@@ -14,27 +15,27 @@ FileSendControl::FileSendControl (std::string group_ip, int port) :
     exit(1);
   }
   ip_used_[ip_local-kMulticastIpMin] = true;
-  auto ip_vec = GetAllNetIP();
-  for (auto ip : ip_vec) {
-    auto addr = new sockaddr_in();
-    int sockfd;
-    if(JoinGroup(addr, &sockfd, group_ip, port)) {
-      group_addrs.push_back(std::make_pair(sockfd, addr));
-    } else {
-      std::cout << ip << " 绑定失败" << std::endl;
-    }
-  }
+  //auto ip_vec = GetAllNetIP();
+  //for (auto ip : ip_vec) {
+  //  auto addr = new sockaddr_in();
+  //  int sockfd;
+  //  if(JoinGroup(addr, &sockfd, group_ip, port, ip)) {
+  //    group_addrs.push_back(std::make_pair(sockfd, addr));
+  //  } else {
+  //    std::cout << ip << " 绑定失败" << std::endl;
+  //  }
+  //}
 }
+
 FileSendControl::~FileSendControl () {
-  /* TODO:  <24-07-19, 王彬> */
-  for (auto i : group_addrs) {
-    delete i.second;
-  }
+  //for (auto i : group_addrs) {
+  //  delete i.second;
+  //}
 }
 void FileSendControl::Run() {
   std::lock_guard<std::mutex> lock(mutex_);
   if (running_) return;
-  std::thread local_t(ListenFileRecvCallback, group_addrs);
+  std::thread local_t(ListenFileRecvCallback, std::ref(con));
   listen_file_recv_.swap(local_t);
   running_ = true;
 }
@@ -62,9 +63,7 @@ void FileSendControl::SendFile(std::string file_path) {
     *(int*)(buf+FileSendControl::kFileLenBeg) = file_len;
     *(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)file_name.size();
     strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
-    for (auto i : group_addrs) {
-      sendto(i.first, buf, FileSendControl::kFileNameBeg+file_name.size(), 0, (sockaddr*)i.second, sizeof(sockaddr_in));
-    }
+    con.Send(buf, FileSendControl::kFileNameBeg+file_name.size());
     std::thread th(FileSendCallback, ip_local, port, std::move(file));
     th.detach();
   } else {
@@ -104,8 +103,8 @@ void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, 
   auto ctl = FileSendControl::GetInstances();
   ctl->Sendend(std::move(file), group_ip_local);
 }
-void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) {
-  std::cout << __FILE__ << " : " << __LINE__ << " : ip is " << group_ip << " port " << port << std::endl;
+void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr) {
+  std::cout << "ip is " << group_ip << " port " << port  << "    " << __FILE__ << " : " << __LINE__<<  std::endl;
   FileRecv(group_ip, port, file_uptr);
   if (file_uptr) {
     std::cout << file_uptr->File_name() << " 接收完毕" << std::endl;
@@ -115,29 +114,15 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
   //std::cout << file_uptr->File_name() << " 接收完毕" << std::endl;
 }
 
-void FileSendControl::ListenFileRecvCallback(std::vector<std::pair<int, sockaddr_in*>> sock_vec) {
+void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   char buf[kBufSize];
-  int epoll_root = epoll_create(10);
-  epoll_event events[sock_vec.size()];
-  int sock_cnt = sock_vec.size();
-  for (int i = 0; i < sock_cnt; ++i) {
-    events[i].data.fd = sock_vec[i].first;
-    events[i].events = EPOLLIN;
-    epoll_ctl(epoll_root, EPOLL_CTL_ADD, sock_vec[i].first, &events[i]);
-  }
-  int cnt = epoll_wait(epoll_root, events, sock_cnt, 3);
-  if (cnt == 0) {
-    std::cout << "超时没消息" << std::endl;
-  } else {
-    for (int i = 0; i < cnt; ++i) {
-      int re = recvfrom(events[i].data.fd, buf, kBufSize, 0, nullptr, nullptr);
-#if DEBUG
-      std::cout << "ip " << *(uint32_t*)(buf+FileSendControl::kGroupIPBeg) << std::endl;
-      std::cout << "port " << *(int*)(buf+FileSendControl::kPortBeg) << std::endl;
-      std::cout << "filelen " << *(int*)(buf+FileSendControl::kFileLenBeg) << std::endl;
-      std::cout << "filenamelen " << *(int*)(buf+FileSendControl::kFileNameLenBeg) << std::endl;
-      std::cout << "new file  " << __FILE__ << std::endl;
-#endif
+  while (true) {
+    int cnt = con.Recv(buf, kBufSize, 3000);
+    if (cnt == -1) {
+      //std::cout << "超时没消息" << std::endl;
+      continue;
+    } else {
+      std::cout << "新消息 " << cnt  << std::endl;
       /*: 解析组播地址和文件名 <24-07-19, 王彬> */
       FileSendControl::Type type = (FileSendControl::Type)*(buf+kTypeBeg);
       if (type != FileSendControl::kNewFile) {
@@ -149,12 +134,7 @@ void FileSendControl::ListenFileRecvCallback(std::vector<std::pair<int, sockaddr
       int file_len = *(int*)(buf+FileSendControl::kFileLenBeg);
       char file_name[File::kFileNameMaxLen];
       strncpy(file_name, buf+FileSendControl::kFileNameBeg, File::kFileNameMaxLen);
-#if DEBUG
-      std::cout << "port " << port_recv << std::endl;
-      std::cout << filename_len << std::endl;
-      file_name[filename_len] = '1';
-      file_name[filename_len+1] = 0;
-#endif
+      file_name[filename_len] = 0;
       /* TODO: 判断是否已经传输 <30-07-19, 王彬> */
       auto file = std::make_unique<File> (file_name, file_len, true);
       //转地址
@@ -163,7 +143,7 @@ void FileSendControl::ListenFileRecvCallback(std::vector<std::pair<int, sockaddr
       memcpy(&ip_addr, &ip_net, sizeof(in_addr));
       std::string ip(inet_ntoa(ip_addr));
       std::cout << __FILE__ << ":line " << __LINE__ << "ip is " << ip << std::endl;
-      std::thread file_recv_thread(RecvFile, ip, port_recv, std::ref(file));
+      std::thread file_recv_thread(RecvFile, ip, port_recv, std::move(file));
       file_recv_thread.detach();
     }
   }
