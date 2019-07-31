@@ -23,6 +23,6 @@ int main(int argc, char *argv[])
 //  join_adr.imr_interface.s_addr = htonl(INADDR_ANY);
 //  setsockopt(sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void *)&join_adr, sizeof(join_adr));
   auto file = std::make_unique<File> ("recvFile", 1000, true);
-  FileRecv("224.0.0.11", 8888, file);
+  FileRecv("224.0.2.11", 8888, file);
   return 0;
 }
