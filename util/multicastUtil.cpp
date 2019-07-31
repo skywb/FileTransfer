@@ -7,27 +7,39 @@
 #include <unistd.h>
 #include <ifaddrs.h>  
 
-
-bool JoinGroup (sockaddr_in* addr, int* sockfd, std::string group_ip, int port, std::string netcard_ip){
-  ip_mreq join_adr;
-	*sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	addr->sin_port = htons(port);
-	addr->sin_family = AF_INET;
-  addr->sin_addr.s_addr =inet_addr(netcard_ip.c_str());
-  //int opt = 1;
-  //// sockfd为需要端口复用的套接字
-  //setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&opt, sizeof(opt));
+bool Bind(sockaddr_in* addr, int* sockfd, std::string ip, int port) {
+  *sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+  addr->sin_port = htons(port);
+  addr->sin_family = AF_INET;
+  if (ip.empty()) {
+    addr->sin_addr.s_addr = htonl(INADDR_ANY);
+  } else {
+    addr->sin_addr.s_addr =inet_addr(ip.c_str());
+  }
+  int opt = 1;
+  // sockfd为需要端口复用的套接字
+  setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&opt, sizeof(opt));
   if(bind(*sockfd, (sockaddr *)addr, sizeof(*addr)) == -1) {
-    std::cout << netcard_ip << "bind error " << strerror(errno) << std::endl;
+    std::cout << ip << "bind error " << strerror(errno) << std::endl;
     close(*sockfd);
     *sockfd = -1;
     return false;
   }
+  return true;
+}
+
+
+bool JoinGroup (int* sockfd, std::string group_ip, std::string netcard_ip){
+  ip_mreq join_adr;
   join_adr.imr_multiaddr.s_addr = inet_addr(group_ip.c_str());
   join_adr.imr_interface.s_addr = inet_addr(netcard_ip.c_str());
-  setsockopt(*sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void *)&join_adr, sizeof(join_adr));
-  unsigned long if_addr = inet_addr(netcard_ip.c_str());
-  int ret = setsockopt(*sockfd, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&if_addr, sizeof(if_addr));
+  int re = setsockopt(*sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void *)&join_adr, sizeof(join_adr));
+  if (re == -1) {
+    std::cout << strerror(errno) << " set sock opt" << std::endl;
+    return false;
+  }
+  //  unsigned long if_addr = inet_addr(netcard_ip.c_str());
+//  int ret = setsockopt(*sockfd, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&if_addr, sizeof(if_addr));
   return true;
 }
 
