@@ -18,20 +18,17 @@ bool JoinGroup (sockaddr_in* addr, int* sockfd, std::string group_ip, int port, 
   //// sockfd为需要端口复用的套接字
   //setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&opt, sizeof(opt));
   if(bind(*sockfd, (sockaddr *)addr, sizeof(*addr)) == -1) {
-    //std::cout << netcard_ip << std::endl;
-    //std::cerr << "bind() error in file " << __FILE__ << std::endl;
-    //std::cout << strerror(errno) << std::endl;
-    *sockfd = -1;
+    std::cout << netcard_ip << "bind error " << strerror(errno) << std::endl;
     close(*sockfd);
+    *sockfd = -1;
     return false;
-    //exit(1);
   }
   join_adr.imr_multiaddr.s_addr = inet_addr(group_ip.c_str());
   join_adr.imr_interface.s_addr = inet_addr(netcard_ip.c_str());
   setsockopt(*sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (void *)&join_adr, sizeof(join_adr));
   unsigned long if_addr = inet_addr(netcard_ip.c_str());
   int ret = setsockopt(*sockfd, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&if_addr, sizeof(if_addr));
-  addr->sin_addr.s_addr = inet_addr(group_ip.c_str());
+  return true;
 }
 
 //返回所有网卡IP列表
