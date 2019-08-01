@@ -9,9 +9,11 @@
 #include <fcntl.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
 
 #include <iostream>
 #include <vector>
+#include <thread>
 
 
 ///*
@@ -31,14 +33,13 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   ////检查的包序号
   int max_pack_num = 0, check_package_num = 0;
   for (int i = 0; ; ++i) {
-    int re = con.Recv(buf, File::kMaxLength, 3000);
-    //recv_len = recvfrom(sockfd, buf, File::kMaxLength, 0, NULL, 0);
-    if (re > 0) {
+    recv_len = con.Recv(buf, kBufSize, 3000);
+    if (recv_len > 0) {
       //数据到来
-      buf[re] = 0;
+      buf[recv_len] = 0;
       int pack_num = *(int*)(buf+kPackNumberBeg);
 #if DEBUG
-      std::cout << "pack_num = " <<  pack_num << std::endl;
+      std::cout << "pack_num = " <<  pack_num   << "len is " << recv_len << " " << __FILE__ << __LINE__<< std::endl;
 #endif
       if (pack_num == 0) {
         continue;
@@ -49,21 +50,22 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
       strncpy(file_name, buf+kFileNameBeg, file_name_len);
       //TODO:校验文件名
-      int data_len = *(buf+kFileDataLenBeg);
+      int data_len = *(int*)(buf+kFileDataLenBeg);
+      std::cout << "data len is " << data_len << std::endl;
+      std::cout << buf+kFileDataBeg << std::endl;
       file_uptr->Write(pack_num, buf+kFileDataBeg, data_len);
     }
     /*: 检查之前的包是否到达 <22-07-19, 王彬> */
-    while (check_package_num <= file_uptr->File_max_packages() && (max_pack_num - check_package_num > 3 || recv_len == 0)) {
-      if (!file_uptr->Check_at_package_number(check_package_num)) {
-        //请求重发
+    std::cout << (check_package_num <= file_uptr->File_max_packages()) << " " << file_uptr->Check_at_package_number(check_package_num) << std::endl;
+    while (check_package_num <= file_uptr->File_max_packages() 
+        && file_uptr->Check_at_package_number(check_package_num)) {
       ++check_package_num;
-      check_package_num = std::min(check_package_num, file_uptr->File_max_packages());
-#if DEBUG
-        std::cout << "请求重发" << std::endl;
-#endif
-      }
-      if (recv_len == 0) recv_len = 1;
     }
+    if (check_package_num > file_uptr->File_max_packages()) break;
+    if (max_pack_num - check_package_num > 3 || recv_len <= 0) { //请求重发
+      check_package_num = std::min(check_package_num, file_uptr->File_max_packages());
+    }
+    std::cout << "check_package_num " << check_package_num << " max_pack_num " << file_uptr->File_max_packages() << std::endl;
   }
   return true;
 }
