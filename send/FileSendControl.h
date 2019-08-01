@@ -41,11 +41,13 @@ public:
   void SendFile(std::string file_path);
   void Run();
   void Sendend(std::unique_ptr<File> file, uint32_t group_ip_local);
+  void Recvend(std::unique_ptr<File> file, uint32_t group_ip_local);
   std::string GetEndFileName();
   static FileSendControl* GetInstances() {
     static FileSendControl* project = new FileSendControl("224.0.2.10", 8888);
     return project;
   }
+  bool FileIsRecving(std::string file_name);
   void SetSavePath() = delete;   //留接口，暂不实现
   bool Quit() = delete ;
 private:
@@ -61,10 +63,7 @@ private:
   std::thread listen_file_recv_;
   bool running_;
   std::queue<std::pair<std::unique_ptr<File>, uint32_t>> end_que_;
-  //std::string save_path_;
-  //sockaddr_in group_addr;
-  //int group_sockfd;
-  //std::vector<std::pair<int, sockaddr_in*>> group_addrs;
+  std::map<std::string, bool> file_is_recving_;
   Connecter con;
 };
 

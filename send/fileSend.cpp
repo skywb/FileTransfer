@@ -23,12 +23,6 @@
  */
 bool FileSend(std::string group_ip, 
               int port, std::unique_ptr<File>& file_uptr) {
-  //auto ip_vec = GetAllNetIP();
-  //std::vector<std::pair<int, sockaddr_in*>> addrs(ip_vec.size());
-  //for (int i = 0; i < ip_vec.size(); ++i) {
-  //  addrs[i].second = new sockaddr_in();
-  //  JoinGroup(addrs[i].second, &addrs[i].first, group_ip, port, group_ip);
-  //}
   Connecter con(group_ip, port);
   LostPackageVec losts(file_uptr->File_max_packages());
   //启动一个线程，监听丢失的包
@@ -36,16 +30,7 @@ bool FileSend(std::string group_ip,
   //设置多播地址
   //发送文件内容
   for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
-    //for (auto addr : addrs) {
-    //  //int time_live = kTTL;
-    //  //setsockopt(addr.first, IPPROTO_IP, IP_MULTICAST_TTL, 
-    //  //    (void *)&time_live, sizeof(time_live));
-    //  SendFileDataAtPackNum(addr.first, addr.second, file_uptr, i); 
-    //}
     SendFileDataAtPackNum(con, file_uptr, i); 
-#if DEBUG
-    std::cout << "发送成功" << std::endl;
-#endif
   }
 #if DEBUG
   std::cout << "发送完毕, 开始校验" << std::endl;
@@ -116,29 +101,24 @@ void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
 void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer) {
   if (package_numbuer == 0) {
     SendFileMessage(con, file); 
-  } else {
+  } else if (package_numbuer > 0) {
     char buf[kBufSize];
     *(int*)(buf+kPackNumberBeg) = package_numbuer;
     *(int*)(buf+kFileNameLenBeg) = file->File_name().size();
     strncpy(buf+kFileNameBeg, file->File_name().c_str(), File::kFileNameMaxLen);
-    std::cout << "package_numbuer is " << package_numbuer << std::endl;
     int re = file->Read(package_numbuer, buf+kFileDataBeg);
     if (re < 0) {
       //read error
+      std::cout << "read len < 0" << __FILE__ << __LINE__ << std::endl;
     }
+    std::cout << "file Read re is " << re << std::endl;
     *(int*)(buf+kFileDataLenBeg) = re;
     int len = re+kFileDataBeg;
-    re = con.Send(buf, len);
-    //re = sendto(sockfd, buf, len, 0, 
-    //    (sockaddr *)addr, sizeof(*addr));
-    if (re < len) {
-     //error 
-      std::cerr << strerror(errno) << std::endl;
-      std::cout << "re is " << re << std::endl;
-#if DEBUG
-      std::cout << "re < len  in sendto " << __FILE__  << std::endl;
-#endif
-    }
+    buf[kFileDataBeg+re] = 0;
+    //std::cout << buf+kFileDataBeg << std::endl;
+    con.Send(buf, len);
+  } else {
+    std::cout << "package_num < 0" << std::endl;
   }
 }
 

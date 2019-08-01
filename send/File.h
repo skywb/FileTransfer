@@ -4,15 +4,10 @@
 #include <iostream>
 #include <vector>
 
-//const int kFileDataMaxLength = 1000;
-//const int kMaxLength = kFileDataMaxLength;
-//const int kFileNameMaxLen = 100;
-
 class File
 {
 public:
   static const int kFileDataMaxLength = 1000;
-  static const int kMaxLength = kFileDataMaxLength;
   static const int kFileNameMaxLen = 100;
 public:
   File (std::string file_path, int size=0, bool newFile = false);
@@ -20,7 +15,7 @@ public:
 
   std::string File_name() { return file_name_; }
   int File_len() { return file_len_; }
-  int File_max_packages() { return (file_len_+kMaxLength-1)/kFileDataMaxLength; }
+  int File_max_packages() { return (file_len_+kFileDataMaxLength-1)/kFileDataMaxLength; }
   //判断是否可读
   //也可用于判断文件是否可用
   bool Readable();

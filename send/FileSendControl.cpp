@@ -1,6 +1,7 @@
 #include "FileSendControl.h"
 #include <utility>
 #include <sys/epoll.h>
+#include <iomanip>
 
 
 FileSendControl::FileSendControl (std::string group_ip, int port) :
@@ -51,7 +52,7 @@ void FileSendControl::SendFile(std::string file_path) {
     *(uint32_t*)(buf+FileSendControl::kGroupIPBeg) = ip_local;
     *(int*)(buf+FileSendControl::kPortBeg) = port;
     *(int*)(buf+FileSendControl::kFileLenBeg) = file_len;
-    *(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)file_name.size();
+    *(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)(file_name.size());
     strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
     con.Send(buf, FileSendControl::kFileNameBeg+file_name.size());
     std::thread th(FileSendCallback, ip_local, port, std::move(file));
@@ -69,7 +70,18 @@ void FileSendControl::SendFile(std::string file_path) {
 void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_local) {
   std::lock_guard<std::mutex> lock(mutex_);
   ip_used_[group_ip_local-kMulticastIpMin] = false;
+  //auto it = file_is_recving_.find(file->File_name());
+  //if (it != file_is_recving_.cend()) {
+  //  file_is_recving_.erase(it);
+  //}
   end_que_.push(std::make_pair(std::move(file), group_ip_local));
+}
+void FileSendControl::Recvend(std::unique_ptr<File> file, uint32_t group_ip_local) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto it = file_is_recving_.find(file->File_name());
+  if (it != file_is_recving_.cend()) {
+    file_is_recving_.erase(it);
+  }
 }
 
 std::string FileSendControl::GetEndFileName() {
@@ -82,38 +94,50 @@ std::string FileSendControl::GetEndFileName() {
   return filename;
 }
 
+bool FileSendControl::FileIsRecving(std::string file_name) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto it = file_is_recving_.find(file_name);
+  if (it == file_is_recving_.cend() || it->second == false) {
+    file_is_recving_[file_name] = true;
+    return false;
+  }
+  return true;
+}
+
 void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, std::unique_ptr<File> file) {
   ulong ip_net_u = htonl(group_ip_local);
   in_addr ip_net;
   memcpy(&ip_net, &ip_net_u, 4);
   std::string ip(inet_ntoa(ip_net));
-  std::cout << "发送文件 ： ip is " << ip << " port : " << port_local << std::endl;
+  //std::cout << "发送文件 ： ip is " << ip << " port : " << port_local << std::endl;
   FileSend(ip, port_local, file);
   //通知已经传输完毕
   auto ctl = FileSendControl::GetInstances();
   ctl->Sendend(std::move(file), group_ip_local);
 }
+
 void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr) {
+#if DEBUG
   std::cout << "ip is " << group_ip << " port " << port  << "    " << __FILE__ << " : " << __LINE__<<  std::endl;
+#endif
   FileRecv(group_ip, port, file_uptr);
   if (file_uptr) {
     std::cout << file_uptr->File_name() << " 接收完毕" << std::endl;
   } else {
     std::cout << "file_uptr 不可用" << std::endl;
   }
-  //std::cout << file_uptr->File_name() << " 接收完毕" << std::endl;
 }
 
 void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   char buf[kBufSize];
   while (true) {
+    memset(buf, 0, kBufSize);
     int cnt = con.Recv(buf, kBufSize, 3000);
     if (cnt == -1) {
-      std::cout << "超时没消息" << std::endl;
       continue;
     } else {
-      std::cout << "新消息 " << cnt  << std::endl;
       /*: 解析组播地址和文件名 <24-07-19, 王彬> */
+      std::cout << "Recv " << cnt << " 字节" << std::endl;
       FileSendControl::Type type = (FileSendControl::Type)*(buf+kTypeBeg);
       if (type != FileSendControl::kNewFile) {
         std::cout << "type != kNewFile" << std::endl;
@@ -125,14 +149,18 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       char file_name[File::kFileNameMaxLen];
       strncpy(file_name, buf+FileSendControl::kFileNameBeg, File::kFileNameMaxLen);
       file_name[filename_len] = 0;
-      /* TODO: 判断是否已经传输 <30-07-19, 王彬> */
+      /*: 判断是否已经传输 <30-07-19, 王彬> */
+      auto conse = FileSendControl::GetInstances();
+      if (conse->FileIsRecving(file_name)) {
+        continue;
+      }
+      std::cout << "接收新的文件 ： " << file_name << std::endl;
       auto file = std::make_unique<File> (file_name, file_len, true);
       //转地址
       uint32_t ip_net = htonl(ip_local);
       in_addr ip_addr;
       memcpy(&ip_addr, &ip_net, sizeof(in_addr));
       std::string ip(inet_ntoa(ip_addr));
-      std::cout << __FILE__ << ":line " << __LINE__ << "ip is " << ip << std::endl;
       std::thread file_recv_thread(RecvFile, ip, port_recv, std::move(file));
       file_recv_thread.detach();
     }

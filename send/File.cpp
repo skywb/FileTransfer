@@ -21,13 +21,14 @@ File::File (std::string file_path, int size, bool newFile) : file_path_(file_pat
     //文件打开失败
 #if DEBUG
     std::cout << "文件打开失败 " << __FILE__  << " : " << __LINE__ << std::endl;
+    std::cout << strerror(errno) << std::endl;
 #endif
   }
   lseek(filefd_, 0, SEEK_SET);
   if (file_len_ == 0) {
     file_len_ = lseek(filefd_, 0, SEEK_END);
   }
-  pack_is_recved_.resize((file_len_+kMaxLength-1)/kMaxLength, false);
+  pack_is_recved_.resize((file_len_+kFileDataMaxLength-1)/kFileDataMaxLength, false);
 }
 
 File::~File() {
@@ -61,7 +62,7 @@ int File::Read(int pack_num, char* buf) {
 #endif
     throw std::string("can't read");
   } 
-  lseek(filefd_, (pack_num-1)*kMaxLength, SEEK_SET); 
+  lseek(filefd_, (pack_num-1)*kFileDataMaxLength, SEEK_SET); 
   return ::read(filefd_, buf, kFileDataMaxLength);
 }
 void File::Write(int pack_num, const char* data, int len) {
@@ -69,7 +70,8 @@ void File::Write(int pack_num, const char* data, int len) {
     throw std::string("can't write");
   }
   pack_is_recved_[pack_num] = true;
-  lseek(filefd_, (pack_num-1)*kMaxLength, SEEK_SET);
+  std::cout << pack_is_recved_[pack_num] << " check in FileWrite" << std::endl;
+  lseek(filefd_, (pack_num-1)*kFileDataMaxLength, SEEK_SET);
   ::write(filefd_, data, len);
 }
 
