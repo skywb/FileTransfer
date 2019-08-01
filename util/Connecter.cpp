@@ -47,6 +47,10 @@ Connecter::Connecter (std::string group_ip, int port) {
 }
 
 Connecter::~Connecter() {
+  close(epoll_root_);
+  for (auto i : sockets) {
+    close(i);
+  }
 }
 
 int Connecter::Recv(char* buf, int len, int timeout) {
