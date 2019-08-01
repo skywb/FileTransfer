@@ -22,6 +22,7 @@ private:
   epoll_event event_;
   std::mutex lock_;
   sockaddr_in addr_;
+  std::map<uint32_t, bool> not_Listen_ip_;
 };
 
 #endif /* end of include guard: CONNECTER_H_7LVEHFUI */

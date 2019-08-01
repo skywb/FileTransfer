@@ -13,16 +13,16 @@ bool Bind(sockaddr_in* addr, int* sockfd, std::string ip, int port) {
   addr->sin_family = AF_INET;
   if (ip.empty()) {
     addr->sin_addr.s_addr = htonl(INADDR_ANY);
-    std::cout << "any" << std::endl;
   } else {
     addr->sin_addr.s_addr =inet_addr(ip.c_str());
-    std::cout << ip << std::endl;
   }
   int opt = 1;
   // sockfd为需要端口复用的套接字
   setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&opt, sizeof(opt));
   if(bind(*sockfd, (sockaddr *)addr, sizeof(*addr)) == -1) {
+#if DEBUG
     std::cout << ip << "bind error " << strerror(errno) << std::endl;
+#endif
     close(*sockfd);
     *sockfd = -1;
     return false;
