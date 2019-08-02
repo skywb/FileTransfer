@@ -31,7 +31,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   ////设置默认等待时间
   //fd_set rd_fd;
   ////检查的包序号
-  int max_pack_num = 0, check_package_num = 0;
+  int max_pack_num = 1, check_package_num = 1;
   for (int i = 0; ; ++i) {
     recv_len = con.Recv(buf, kBufSize, 3000);
     if (recv_len > 0) {
