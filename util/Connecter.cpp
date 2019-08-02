@@ -50,12 +50,12 @@ Connecter::~Connecter() {
 
 int Connecter::Recv(char* buf, int len, int timeout) {
   int cnt = epoll_wait(epoll_root_, &event_, 1, timeout);
+  //std::cout << "epoll_wait cnt " << cnt << std::endl;
   std::lock_guard<std::mutex> lock_guard(lock_);
   if (cnt > 0) {
     sockaddr_in addr;
     socklen_t addr_len = sizeof(addr);
     int re = recvfrom(event_.data.fd, buf, len, 0, (sockaddr*)&addr, &addr_len);
-    std::cout << re << std::endl;
     if (re == -1) {
       perror("error in Recv");
     }
