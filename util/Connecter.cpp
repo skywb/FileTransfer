@@ -17,14 +17,10 @@ Connecter::Connecter (std::string group_ip, int port) {
     not_Listen_ip_[inet_addr(ip_vec[i].c_str())] = true;
 #ifdef __WIN32__
     if (Bind(addr, &sockfd, ip_vec[i], port)) {             //Linux 不接 发  Win   发  接
-      std::cout << "Windows" << std::endl;
 #elif __LINUX__
     if (Bind(addr, &sockfd, group_ip, port)) {            //Linux 接  发      Win  绑定失败
-      std::cout << "Linux" << std::endl;
 #else 
-    if (Bind(addr, &sockfd, ip_vec[i], port)) {             //Linux 不接 发  Win   发  接
-      std::cout << "其他" << std::endl;
-    //if (Bind(addr, &sockfd, std::string(), port)) {       //Linux 接 发     Win 接  不发
+    if (Bind(addr, &sockfd, std::string(), port)) {       //Linux 接 发     Win 接  不发
 #endif
       if (true == JoinGroup(&sockfd, group_ip, ip_vec[i])) {
         std::cout << ip_vec[i] << "加入组播成功" << std::endl;
@@ -42,7 +38,6 @@ Connecter::Connecter (std::string group_ip, int port) {
     event_.data.fd = sockets[i];
     event_.events = EPOLLIN;
     epoll_ctl(epoll_root_, EPOLL_CTL_ADD, sockets[i], &event_);
-    std::cout << "epoll add" << std::endl;
   }
 }
 
@@ -75,7 +70,6 @@ int Connecter::Send(char* buf, int len) {
   std::lock_guard<std::mutex> lock_guard(lock_);
   for (auto i : sockets) {
     int re = sendto(i, buf, len, 0, (sockaddr*)&addr_, sizeof(sockaddr_in));
-    std::cout << "package_num is " << *(int*)(buf+kPackNumberBeg) << " len is " << re << std::endl;
     if (re == -1) {
       std::cout << inet_ntoa(addr_.sin_addr) << " 发送失败" << std::endl;
       std::cout << strerror(errno) << std::endl;
