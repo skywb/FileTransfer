@@ -3,6 +3,7 @@
 #include "reactor/Reactor.h"
 #include "util/multicastUtil.h"
 #include "util/Connecter.h"
+#include "send/FileSendControl.h"
 
 #include <string.h>
 #include <sys/epoll.h>
@@ -157,9 +158,11 @@ void ListenLostPackage(int port, LostPackageVec& losts, Connecter& con) {
     //}
     int re = con.Recv(buf, kBufSize, 1000);
     if (re > 0) {
-      int cmd = *(int*)buf;
-      int package_num = *(int*)(buf+sizeof(cmd));
-      losts.AddFileLostedRecord(package_num);
+      FileSendControl::Type cmd = *(FileSendControl::Type*)buf;
+      if (cmd == FileSendControl::kReSend) {
+        int package_num = *(int*)(buf+sizeof(FileSendControl::Type));
+        losts.AddFileLostedRecord(package_num);
+      }
     }
 	}
 }

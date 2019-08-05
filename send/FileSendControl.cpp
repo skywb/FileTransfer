@@ -1,4 +1,5 @@
 #include "FileSendControl.h"
+#include "util/zip.h"
 #include <utility>
 #include <sys/epoll.h>
 #include <iomanip>
@@ -33,6 +34,7 @@ void FileSendControl::Run() {
 
 void FileSendControl::SendFile(std::string file_path) {
   std::lock_guard<std::mutex> lock(mutex_);
+  file_path = zip(file_path);
   auto file = std::make_unique<File>(file_path);
   char buf[kBufSize];
   //找到一个可用的ip
@@ -121,8 +123,15 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
   std::cout << "ip is " << group_ip << " port " << port  << "    " << __FILE__ << " : " << __LINE__<<  std::endl;
 #endif
   FileRecv(group_ip, port, file_uptr);
+  std::string file_name = file_uptr->File_name();
+  for (int i = 0; i < 2; ++i) {
+    auto pos = file_name.find_last_of('.');
+    if (pos == -1) break;
+    file_name.erase(pos);
+  }
+  unzip(file_uptr->File_name(), "./");
   if (file_uptr) {
-    std::cout << file_uptr->File_name() << " 接收完毕" << std::endl;
+    std::cout << file_name << " 接收完毕" << std::endl;
   } else {
     std::cout << "file_uptr 不可用" << std::endl;
   }

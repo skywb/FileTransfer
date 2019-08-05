@@ -24,7 +24,8 @@ class FileSendControl
 public:
   enum Type {
     kNewFile = 1,
-    kAlive = 2
+    kAlive = 2,
+    kReSend = 3
   };
   //224.0.0.10
   static const uint32_t kMulticastIpMin = 3758096897;

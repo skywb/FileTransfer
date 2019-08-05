@@ -3,6 +3,7 @@
 #include "reactor/CMD.h"
 #include "util/multicastUtil.h"
 #include "util/Connecter.h"
+#include "send/FileSendControl.h"
 
 #include <cstring>
 #include <sys/epoll.h>
@@ -51,8 +52,6 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       strncpy(file_name, buf+kFileNameBeg, file_name_len);
       //TODO:校验文件名
       int data_len = *(int*)(buf+kFileDataLenBeg);
-      std::cout << "data len is " << data_len << std::endl;
-      std::cout << buf+kFileDataBeg << std::endl;
       file_uptr->Write(pack_num, buf+kFileDataBeg, data_len);
     }
     /*: 检查之前的包是否到达 <22-07-19, 王彬> */
@@ -63,6 +62,8 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
     }
     if (check_package_num > file_uptr->File_max_packages()) break;
     if (max_pack_num - check_package_num > 3 || recv_len <= 0) { //请求重发
+      *(FileSendControl::Type*)buf = FileSendControl::Type::kReSend;
+      *(int*)(buf+sizeof(FileSendControl::Type)) = check_package_num;
       check_package_num = std::min(check_package_num, file_uptr->File_max_packages());
     }
     std::cout << "check_package_num " << check_package_num << " max_pack_num " << file_uptr->File_max_packages() << std::endl;
