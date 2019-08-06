@@ -1,6 +1,5 @@
 #include "fileRecv.h"
 #include "send/fileSend.h"
-#include "reactor/CMD.h"
 #include "util/multicastUtil.h"
 #include "util/Connecter.h"
 #include "send/FileSendControl.h"

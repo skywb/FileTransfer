@@ -1,6 +1,5 @@
 #include "fileSend.h"
 #include "send/File.h"
-#include "reactor/Reactor.h"
 #include "util/multicastUtil.h"
 #include "util/Connecter.h"
 #include "send/FileSendControl.h"

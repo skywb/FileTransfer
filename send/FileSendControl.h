@@ -25,7 +25,8 @@ public:
   enum Type {
     kNewFile = 1,
     kAlive = 2,
-    kReSend = 3
+    kReSend = 3,
+    kRecvend = 4
   };
   //224.0.0.10
   static const uint32_t kMulticastIpMin = 3758096897;
@@ -53,6 +54,7 @@ public:
   bool Quit() = delete ;
 private:
   FileSendControl (std::string group_ip, int port);
+  static void NoticeFront(std::string file_name, Type);
   static void ListenFileRecvCallback(Connecter& con);
   static void FileSendCallback(uint32_t group_ip_net, int port_local, std::unique_ptr<File> file);
   static void RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr);

@@ -131,7 +131,10 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
   }
   unzip(file_uptr->File_name(), "./");
   if (file_uptr) {
+#if DEBUG
     std::cout << file_name << " 接收完毕" << std::endl;
+#endif
+    NoticeFront(file_name, Type::kRecvend);
   } else {
     std::cout << "file_uptr 不可用" << std::endl;
   }
@@ -163,7 +166,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       if (conse->FileIsRecving(file_name)) {
         continue;
       }
-      std::cout << "接收新的文件 ： " << file_name << std::endl;
+      NoticeFront(file_name, Type::kNewFile);
       auto file = std::make_unique<File> (file_name, file_len, true);
       //转地址
       uint32_t ip_net = htonl(ip_local);
@@ -175,3 +178,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
     }
   }
 }
+void FileSendControl::NoticeFront(std::string file_name, Type) {
+
+}
+
