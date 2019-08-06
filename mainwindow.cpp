@@ -6,6 +6,7 @@
 #include "QTableWidget"
 #include "QComboBox"
 #include "send/FileSendControl.h"
+#include <functional>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -13,6 +14,15 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
     console = FileSendControl::GetInstances();
+    console->RegistNoticeFrontCallBack(
+                std::bind(
+                    NoticeFrontCallBack,
+                    std::placeholders::_1,
+                    std::placeholders::_2,
+                    ui->tableWidget
+                    )
+                );
+
     console->Run();
 }
 
@@ -53,10 +63,9 @@ void MainWindow::on_sendDir_clicked()
     table->setItem(rowIndex, 0, item);
 }
 
-void MainWindow::NoticeFrontCallBack(std::string fileName, FileSendControl::Type type) {
+void MainWindow::NoticeFrontCallBack(std::string fileName, FileSendControl::Type type, QTableWidget *table) {
     QString file_name;
     file_name.fromStdString(fileName);
-    auto *table = ui->tableWidget;
     QTableWidgetItem *item_file = nullptr;
     QTableWidgetItem *item_stat = nullptr;
 

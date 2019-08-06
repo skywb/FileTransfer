@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include "QTableWidget"
 #include "send/FileSendControl.h"
 
 namespace Ui {
@@ -19,7 +20,7 @@ public:
 private slots:
     //void sendFile(FileSendControl* ctl, std::string filepath);
     //bool recvFile(std::string savePath);
-    void NoticeFrontCallBack(std::string fileName, FileSendControl::Type type);
+    static void NoticeFrontCallBack(std::string fileName, FileSendControl::Type type, QTableWidget *table);
     void on_sendFile_clicked();
 
     void on_sendDir_clicked();
