@@ -41,11 +41,14 @@ void MainWindow::on_sendFile_clicked()
     int rowIndex = table->rowCount();
     table->setRowCount(rowIndex + 1);//总行数增加1
     //ui->tableWidget->setRowHeight(rowIndex, 24);//设置行的高度
-    QTableWidgetItem *item = new QTableWidgetItem(openFile);
+    QString file_name = openFile;
+    file_name = file_name.mid(file_name.lastIndexOf('/')+1, file_name.size());
+    QTableWidgetItem *item = new QTableWidgetItem(file_name);
+    table->setItem(rowIndex, 0, item);
+    item = new QTableWidgetItem(QString("sending"));
+    table->setItem(rowIndex, 1, item);
     //item->setText("item");
     console->SendFile(openFile.toStdString());
-    //sendFile(openFile.toStdString());
-    table->setItem(rowIndex, 0, item);
 }
 
 void MainWindow::on_sendDir_clicked()
@@ -56,7 +59,6 @@ void MainWindow::on_sendDir_clicked()
     openDir = QFileDialog::getExistingDirectory(this, "open");
     int rowIndex = table->rowCount();
     table->setRowCount(rowIndex + 1);//总行数增加1
-    //ui->tableWidget->setRowHeight(rowIndex, 24);//设置行的高度
     QTableWidgetItem *item = new QTableWidgetItem(openDir);
     console->SendFile(openDir.toStdString());
     //item->setText("item");
@@ -64,12 +66,12 @@ void MainWindow::on_sendDir_clicked()
 }
 
 void MainWindow::NoticeFrontCallBack(std::string fileName, FileSendControl::Type type, QTableWidget *table) {
-    QString file_name;
-    file_name.fromStdString(fileName);
+    QString file_name = QString::fromStdString(fileName);
     QTableWidgetItem *item_file = nullptr;
     QTableWidgetItem *item_stat = nullptr;
 
     int rowIndex = -1;
+    int rowCnt = 0;
     switch (type) {
     case FileSendControl::kNewFile:
         rowIndex = table->rowCount();
@@ -80,8 +82,8 @@ void MainWindow::NoticeFrontCallBack(std::string fileName, FileSendControl::Type
         table->setItem(rowIndex, 1, item_stat);
         break;
     case FileSendControl::kRecvend:
-        int cnt = table->rowCount();
-        for (int i=0; i<cnt; ++i) {
+        rowCnt = table->rowCount();
+        for (int i=0; i<rowCnt; ++i) {
             item_file = table->item(i, 0);
             if (item_file->text() == file_name) {
                 rowIndex = i;
@@ -91,7 +93,22 @@ void MainWindow::NoticeFrontCallBack(std::string fileName, FileSendControl::Type
         }
         if (item_file) {
             item_file->setText(file_name);
-            item_file->setText("recvend");
+            item_stat->setText("recvend");
+        }
+        break;
+    case FileSendControl::kSendend:
+        rowCnt = table->rowCount();
+        for (int i=0; i<rowCnt; ++i) {
+            item_file = table->item(i, 0);
+            if (item_file->text() == file_name) {
+                rowIndex = i;
+                item_stat = table->item(i, 1);
+                break;
+            }
+        }
+        if (item_stat) {
+            item_file->setText(file_name);
+            item_stat->setText("sendend");
         }
         break;
     }

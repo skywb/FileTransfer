@@ -70,7 +70,7 @@ void File::Write(int pack_num, const char* data, int len) {
     throw std::string("can't write");
   }
   pack_is_recved_[pack_num] = true;
-  std::cout <<pack_num << " recived in FileWrite" << std::endl;
+  std::cout << pack_is_recved_[pack_num] << " check in FileWrite" << std::endl;
   lseek(filefd_, (pack_num-1)*kFileDataMaxLength, SEEK_SET);
   ::write(filefd_, data, len);
 }

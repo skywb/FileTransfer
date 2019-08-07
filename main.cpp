@@ -1,3 +1,4 @@
+#define DEBUG true
 #include "mainwindow.h"
 #include <QApplication>
 
