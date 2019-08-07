@@ -31,9 +31,14 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   ////设置默认等待时间
   //fd_set rd_fd;
   ////检查的包序号
-  int max_pack_num = 1, check_package_num = 1;
+  int recv_max_pack_num = 1, check_package_num = 1;
+  bool recvend = false;
   for (int i = 0; ; ++i) {
+#if DEBUG
     recv_len = con.Recv(buf, kBufSize, 3000);
+#else
+    recv_len = con.Recv(buf, kBufSize, 500);
+#endif
     if (recv_len > 0) {
       //数据到来
       buf[recv_len] = 0;
@@ -44,7 +49,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       if (pack_num == 0) {
         continue;
       }
-      max_pack_num = std::max(pack_num, max_pack_num);
+      recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
       int file_name_len = *(int*)(buf+kFileNameLenBeg);
       char file_name[File::kFileNameMaxLen+10];
       /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
@@ -54,18 +59,22 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       file_uptr->Write(pack_num, buf+kFileDataBeg, data_len);
     }
     /*: 检查之前的包是否到达 <22-07-19, 王彬> */
-    std::cout << (check_package_num <= file_uptr->File_max_packages()) << " " << file_uptr->Check_at_package_number(check_package_num) << std::endl;
     while (check_package_num <= file_uptr->File_max_packages() 
         && file_uptr->Check_at_package_number(check_package_num)) {
       ++check_package_num;
     }
-    if (check_package_num > file_uptr->File_max_packages()) break;
-    if (max_pack_num - check_package_num > 3 || recv_len <= 0) { //请求重发
+    if (check_package_num > file_uptr->File_max_packages()) {
+      check_package_num = 0;
+      while (check_package_num <= file_uptr->File_max_packages() && file_uptr->Check_at_package_number(check_package_num))
+        ++check_package_num;
+      if (check_package_num > file_uptr->File_max_packages()) break;
+    }
+    if (recv_max_pack_num - check_package_num > 3 || recv_len <= 0) { //请求重发
       *(FileSendControl::Type*)buf = FileSendControl::Type::kReSend;
       *(int*)(buf+sizeof(FileSendControl::Type)) = check_package_num;
       check_package_num = std::min(check_package_num, file_uptr->File_max_packages());
     }
-    std::cout << "check_package_num " << check_package_num << " max_pack_num " << file_uptr->File_max_packages() << std::endl;
+    std::cout << "check_package_num " << check_package_num << " recv_max_pack_num " << file_uptr->File_max_packages() << std::endl;
   }
   return true;
 }

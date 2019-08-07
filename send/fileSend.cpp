@@ -43,8 +43,8 @@ bool FileSend(std::string group_ip,
       //等待并检查
       //告知子线程结束， 并回收子线程
       //结束
-      //简单代替， 应修改
-      const int kSleepTime = 3;
+      //简单使用sleep代替， 应修改
+      const int kSleepTime = 5;
       sleep(kSleepTime);
       lose = losts.GetFileLostedPackage();
       if (lose.empty()) { 
@@ -54,24 +54,17 @@ bool FileSend(std::string group_ip,
     } else {
       //重发 
       for (auto i : lose) {
-        //for (auto addr : addrs) {
-        //  //int time_live = kTTL;
-        //  //setsockopt(addr.first, IPPROTO_IP, IP_MULTICAST_TTL, 
-        //  //    (void *)&time_live, sizeof(time_live));
-        //  SendFileDataAtPackNum(addr.first, addr.second, file_uptr, i); 
-        //}
+#if DEBUG
+        std::cout << "重发 package_num " << i << std::endl;
+#endif
         SendFileDataAtPackNum(con, file_uptr, i); 
       }
     }
   }
 #if DEBUG
-  std::cout << "结束" << std::endl;
+  std::cout << "发送文件结束" << std::endl;
 #endif
   listen.join();
-  //for (auto i : addrs) {
-  //  close(i.first);
-  //  delete i.second;
-  //}
   return true;
 }
 
