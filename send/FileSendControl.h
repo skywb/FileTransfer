@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <functional>
 
 /*
  * 启动一个线程监听是否有文件的发送
@@ -41,6 +42,10 @@ public:
 public:
   virtual ~FileSendControl ();
   void SendFile(std::string file_path);
+  void RegistNoticeFrontCallBack(std::function<void(std::string, FileSendControl::Type)> func) {
+      NoticeFront_ = func;
+  }
+  void NoticeFront(std::string file_name, Type type);
   void Run();
   void Sendend(std::unique_ptr<File> file, uint32_t group_ip_local);
   void Recvend(std::unique_ptr<File> file, uint32_t group_ip_local);
@@ -54,7 +59,6 @@ public:
   bool Quit() = delete ;
 private:
   FileSendControl (std::string group_ip, int port);
-  static void NoticeFront(std::string file_name, Type);
   static void ListenFileRecvCallback(Connecter& con);
   static void FileSendCallback(uint32_t group_ip_net, int port_local, std::unique_ptr<File> file);
   static void RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr);
@@ -68,6 +72,7 @@ private:
   std::queue<std::pair<std::unique_ptr<File>, uint32_t>> end_que_;
   std::map<std::string, bool> file_is_recving_;
   Connecter con;
+  std::function<void(std::string fileName, FileSendControl::Type type)> NoticeFront_;
 };
 
 
