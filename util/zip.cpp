@@ -24,7 +24,7 @@ std::string zip(std::string filePath) {
 bool unzip(std::string filePath, std::string objPath) {
     std::string cmd = "tar -xzf ";
     cmd += filePath;
-    cmd += " ";
+    cmd += " -C ";
     cmd += objPath;
     system(cmd.c_str());
   //}
