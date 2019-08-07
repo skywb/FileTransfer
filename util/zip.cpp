@@ -16,6 +16,7 @@ std::string zip(std::string filePath) {
     cmd += " ";
     cmd += filePath;
     system(cmd.c_str());
+    std::cout << cmd << std::endl;
   //}
 
     return filePath+".tar.gz";
@@ -27,6 +28,7 @@ bool unzip(std::string filePath, std::string objPath) {
     cmd += " -C ";
     cmd += objPath;
     system(cmd.c_str());
+    std::cout << cmd << std::endl;
   //}
   return true;
 }

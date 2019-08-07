@@ -14,6 +14,7 @@ public:
   virtual ~File ();
 
   std::string File_name() { return file_name_; }
+  std::string File_path() { return file_path_; }
   int File_len() { return file_len_; }
   int File_max_packages() { return (file_len_+kFileDataMaxLength-1)/kFileDataMaxLength; }
   //判断是否可读

@@ -86,14 +86,15 @@ void MainWindow::NoticeFrontCallBack(std::string fileName, FileSendControl::Type
         for (int i=0; i<rowCnt; ++i) {
             item_file = table->item(i, 0);
             if (item_file->text() == file_name) {
-                rowIndex = i;
                 item_stat = table->item(i, 1);
                 break;
             }
         }
-        if (item_file) {
+        if (item_stat) {
             item_file->setText(file_name);
             item_stat->setText("recvend");
+        } else {
+            qDebug() << "not found " << file_name;
         }
         break;
     case FileSendControl::kSendend:

@@ -72,11 +72,19 @@ void FileSendControl::SendFile(std::string file_path) {
 void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_local) {
   std::lock_guard<std::mutex> lock(mutex_);
   ip_used_[group_ip_local-kMulticastIpMin] = false;
-  //auto it = file_is_recving_.find(file->File_name());
-  //if (it != file_is_recving_.cend()) {
-  //  file_is_recving_.erase(it);
-  //}
-  end_que_.push(std::make_pair(std::move(file), group_ip_local));
+  auto ctl = GetInstances();
+  std::string file_name = file->File_name();
+  file_name = file_name.substr(0, file_name.rfind('.'));
+  file_name = file_name.substr(0, file_name.rfind('.'));
+  ctl->NoticeFront(file_name, Type::kSendend);
+  std::string cmd = "rm -f ";
+  cmd += file->File_path() + file->File_name();
+  system(cmd.c_str());
+  std::cout << cmd << std::endl;
+  std::cout << std::flush;
+  //std::cout << "delete " << file->File_name() << std::endl;
+  file.release();
+  //end_que_.push(std::make_pair(std::move(file), group_ip_local));
 }
 void FileSendControl::Recvend(std::unique_ptr<File> file, uint32_t group_ip_local) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -86,15 +94,15 @@ void FileSendControl::Recvend(std::unique_ptr<File> file, uint32_t group_ip_loca
   }
 }
 
-std::string FileSendControl::GetEndFileName() {
-  std::lock_guard<std::mutex> lock_guard(mutex_);
-  if (end_que_.empty()) return std::string();
-  auto endfile = std::move(end_que_.front());
-  end_que_.pop();
-  std::string filename = endfile.first->File_name();
-  endfile.first.release();
-  return filename;
-}
+//std::string FileSendControl::GetEndFileName() {
+//  std::lock_guard<std::mutex> lock_guard(mutex_);
+//  if (end_que_.empty()) return std::string();
+//  auto endfile = std::move(end_que_.front());
+//  end_que_.pop();
+//  std::string filename = endfile.first->File_name();
+//  endfile.first.release();
+//  return filename;
+//}
 
 bool FileSendControl::FileIsRecving(std::string file_name) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -119,9 +127,6 @@ void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, 
 }
 
 void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr) {
-#if DEBUG
-  std::cout << "ip is " << group_ip << " port " << port  << "    " << __FILE__ << " : " << __LINE__<<  std::endl;
-#endif
   FileRecv(group_ip, port, file_uptr);
   std::string file_name = file_uptr->File_name();
   for (int i = 0; i < 2; ++i) {
@@ -131,9 +136,6 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
   }
   unzip(file_uptr->File_name(), "./");
   if (file_uptr) {
-#if DEBUG
-    std::cout << file_name << " 接收完毕" << std::endl;
-#endif
     auto ctl = FileSendControl::GetInstances();
     ctl->NoticeFront(file_name, Type::kRecvend);
   } else {
@@ -167,8 +169,11 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       if (conse->FileIsRecving(file_name)) {
         continue;
       }
+      std::string file_name_front(file_name);
+      file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
+      file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
       auto ctl = FileSendControl::GetInstances();
-      ctl->NoticeFront(file_name, Type::kNewFile);
+      ctl->NoticeFront(file_name_front, Type::kNewFile);
       auto file = std::make_unique<File> (file_name, file_len, true);
       //转地址
       uint32_t ip_net = htonl(ip_local);

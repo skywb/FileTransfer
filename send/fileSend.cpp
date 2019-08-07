@@ -32,9 +32,7 @@ bool FileSend(std::string group_ip,
   for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
     SendFileDataAtPackNum(con, file_uptr, i); 
   }
-#if DEBUG
   std::cout << "发送完毕, 开始校验" << std::endl;
-#endif
   //检查所有的丢包情况， 并重发
   while (true) {
     auto lose = losts.GetFileLostedPackage();
@@ -47,21 +45,25 @@ bool FileSend(std::string group_ip,
       const int kSleepTime = 5;
       sleep(kSleepTime);
       lose = losts.GetFileLostedPackage();
-      if (lose.empty()) { 
-        losts.ExitListen();
-        break; 
+      if (lose.empty()) {
+          losts.ExitListen();
+          break;
+      } else {
+          //重发
+          for (auto i : lose) {
+              std::cout << "重发 package_num " << i << std::endl;
+              SendFileDataAtPackNum(con, file_uptr, i);
+          }
       }
     } else {
-      //重发 
-      for (auto i : lose) {
-#if DEBUG
+        //重发
+        for (auto i : lose) {
         std::cout << "重发 package_num " << i << std::endl;
-#endif
         SendFileDataAtPackNum(con, file_uptr, i); 
       }
     }
   }
-#if DEBUG
+#ifdef DEBUG
   std::cout << "发送文件结束" << std::endl;
 #endif
   listen.join();
@@ -104,12 +106,14 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
       //read error
       std::cout << "read len < 0" << __FILE__ << __LINE__ << std::endl;
     }
-    std::cout << "file Read re is " << re << std::endl;
+    //std::cout << "file Read re is " << re << std::endl;
     *(int*)(buf+kFileDataLenBeg) = re;
     int len = re+kFileDataBeg;
     buf[kFileDataBeg+re] = 0;
     //std::cout << buf+kFileDataBeg << std::endl;
-    con.Send(buf, len);
+    if (-1 == con.Send(buf, len)) {
+        std::cout << "send error " << package_numbuer << std::endl;
+    }
   } else {
     std::cout << "package_num < 0" << std::endl;
   }
@@ -121,38 +125,13 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
  */
 void ListenLostPackage(int port, LostPackageVec& losts, Connecter& con) {
   char buf[kBufSize];
-  //int epoll_root = epoll_create(10);
-  //epoll_event events[addrs.size()];
-  //for (auto i : addrs) {
-  //  events[0].data.fd =i.first;
-  //  events[0].events = EPOLLIN;
-  //  epoll_ctl(epoll_root, EPOLL_CTL_ADD,i.first, &events[0]);
-  //}
-  //timeval listen_time;
-  //fd_set rd_fd;
-  //FD_ZERO(&rd_fd);
-  //FD_SET(sockfd, &rd_fd);
-	while (losts.isRunning()) {
-    //listen_time.tv_sec = 1;
-    //listen_time.tv_usec = 0;
-    //setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&listen_time, sizeof(timeval));
-    //int re = recvfrom(sockfd, buf, kBufSize, 0, (sockaddr*)&addr, &len);
-    //int cnt = epoll_wait(epoll_root, events, addrs.size(), 1);
-    //if (cnt > 0) {
-    //  for (int i = 0; i < cnt; ++i) {
-    //    int re = recvfrom(events[i].data.fd, buf, kBufSize, 0, nullptr, nullptr);
-    //    if (re > 0) {
-    //      int cmd = *(int*)buf;
-    //      int package_num = *(int*)(buf+sizeof(cmd));
-    //      losts.AddFileLostedRecord(package_num);
-    //    }
-    //  }
-    //}
+  while (losts.isRunning()) {
     int re = con.Recv(buf, kBufSize, 1000);
     if (re > 0) {
       FileSendControl::Type cmd = *(FileSendControl::Type*)buf;
       if (cmd == FileSendControl::kReSend) {
         int package_num = *(int*)(buf+sizeof(FileSendControl::Type));
+        //std::cout << "recived  package_num resend request " << package_num << std::endl;
         losts.AddFileLostedRecord(package_num);
       }
     }

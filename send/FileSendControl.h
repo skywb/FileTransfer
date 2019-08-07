@@ -27,7 +27,8 @@ public:
     kNewFile = 1,
     kAlive = 2,
     kReSend = 3,
-    kRecvend = 4
+    kRecvend = 4,
+    kSendend = 5
   };
   //224.0.0.10
   static const uint32_t kMulticastIpMin = 3758096897;
@@ -49,7 +50,7 @@ public:
   void Run();
   void Sendend(std::unique_ptr<File> file, uint32_t group_ip_local);
   void Recvend(std::unique_ptr<File> file, uint32_t group_ip_local);
-  std::string GetEndFileName();
+  //std::string GetEndFileName();
   static FileSendControl* GetInstances() {
     static FileSendControl* project = new FileSendControl("224.0.2.10", 8888);
     return project;
@@ -69,7 +70,7 @@ private:
   std::vector<bool> ip_used_;
   std::thread listen_file_recv_;
   bool running_;
-  std::queue<std::pair<std::unique_ptr<File>, uint32_t>> end_que_;
+  //std::queue<std::pair<std::unique_ptr<File>, uint32_t>> end_que_;
   std::map<std::string, bool> file_is_recving_;
   Connecter con;
   std::function<void(std::string fileName, FileSendControl::Type type)> NoticeFront_;

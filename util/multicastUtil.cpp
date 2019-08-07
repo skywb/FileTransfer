@@ -42,6 +42,9 @@ bool JoinGroup (int* sockfd, std::string group_ip, std::string netcard_ip){
   }
   unsigned long if_addr = inet_addr(netcard_ip.c_str());
   int ret = setsockopt(*sockfd, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&if_addr, sizeof(if_addr));
+  //not date loop
+  unsigned char loop = 0;
+  setsockopt(*sockfd, IPPROTO_IP,IP_MULTICAST_LOOP, &loop, sizeof(loop));
   return true;
 }
 

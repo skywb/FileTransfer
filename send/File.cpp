@@ -15,7 +15,7 @@ File::File (std::string file_path, int size, bool newFile) : file_path_(file_pat
     filefd_ = ::open(file_path_.c_str(), O_RDONLY);
   }
   auto pos = file_path.find_last_of('/');
-  file_path_ = file_path.substr(0, pos);
+  file_path_ = file_path.substr(0, pos+1);
   file_name_ = file_path.substr(pos+1); 
   if (filefd_ == -1) {
     //文件打开失败
@@ -29,6 +29,7 @@ File::File (std::string file_path, int size, bool newFile) : file_path_(file_pat
     file_len_ = lseek(filefd_, 0, SEEK_END);
   }
   pack_is_recved_.resize((file_len_+kFileDataMaxLength-1)/kFileDataMaxLength, false);
+  pack_is_recved_[0] = true;
 }
 
 File::~File() {
@@ -70,7 +71,7 @@ void File::Write(int pack_num, const char* data, int len) {
     throw std::string("can't write");
   }
   pack_is_recved_[pack_num] = true;
-  std::cout << pack_is_recved_[pack_num] << " check in FileWrite" << std::endl;
+  std::cout << pack_num << " recived in FileWrite" << std::endl;
   lseek(filefd_, (pack_num-1)*kFileDataMaxLength, SEEK_SET);
   ::write(filefd_, data, len);
 }
@@ -86,5 +87,6 @@ std::vector<int> File::Check() {
 }
 
 bool File::Check_at_package_number(int package_num) {
+
   return pack_is_recved_[package_num];
 }

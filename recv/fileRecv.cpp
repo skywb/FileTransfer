@@ -26,26 +26,18 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   char buf[kBufSize];
   //接收的长度
   int recv_len = 0;
-  //分别上一个包到来时间，本次到来时间， 差值， 以及平均时间
-  //timeval pre_time, cur_time, sub_time, avg_time;
   ////设置默认等待时间
   //fd_set rd_fd;
   ////检查的包序号
   int recv_max_pack_num = 1, check_package_num = 1;
-  bool recvend = false;
+  int recnt = 0;
   for (int i = 0; ; ++i) {
-#if DEBUG
     recv_len = con.Recv(buf, kBufSize, 3000);
-#else
-    recv_len = con.Recv(buf, kBufSize, 500);
-#endif
+    std::cout << "recv return " << recv_len  << " " << __FILE__ << __LINE__ << std::endl;
     if (recv_len > 0) {
       //数据到来
       buf[recv_len] = 0;
       int pack_num = *(int*)(buf+kPackNumberBeg);
-#if DEBUG
-      std::cout << "pack_num = " <<  pack_num   << "len is " << recv_len << " " << __FILE__ << __LINE__<< std::endl;
-#endif
       if (pack_num == 0) {
         continue;
       }
@@ -67,14 +59,23 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       check_package_num = 0;
       while (check_package_num <= file_uptr->File_max_packages() && file_uptr->Check_at_package_number(check_package_num))
         ++check_package_num;
-      if (check_package_num > file_uptr->File_max_packages()) break;
+      std::cout << check_package_num << " in checkend func" << std::endl;
+      if (check_package_num > file_uptr->File_max_packages()) {
+          std::cout << "check end" << std::endl;
+          break;
+      }
     }
     if (recv_max_pack_num - check_package_num > 3 || recv_len <= 0) { //请求重发
       *(FileSendControl::Type*)buf = FileSendControl::Type::kReSend;
       *(int*)(buf+sizeof(FileSendControl::Type)) = check_package_num;
       check_package_num = std::min(check_package_num, file_uptr->File_max_packages());
+      //++check_package_num;
+      //std::cout << "request" << std::endl;
+      //std::cout << "recv_max_pack_num " << recv_max_pack_num << " check " << check_package_num << " len " << recv_len << std::endl;
+      //sleep(1);
+      con.Send(buf, sizeof (FileSendControl::Type) + sizeof (check_package_num));
     }
-    std::cout << "check_package_num " << check_package_num << " recv_max_pack_num " << file_uptr->File_max_packages() << std::endl;
+    //std::cout << "check_package_num " << check_package_num << " recv_max_pack_num " << file_uptr->File_max_packages() << std::endl;
   }
   return true;
 }
