@@ -6,6 +6,7 @@
 #include "QTableWidget"
 #include "QComboBox"
 #include "send/FileSendControl.h"
+#include "util/zip.h"
 #include <functional>
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -38,6 +39,7 @@ void MainWindow::on_sendFile_clicked()
     QString openFile="";
     auto table = ui->tableWidget;
     openFile=QFileDialog::getOpenFileName(this,"打开","./","");
+    if (openFile == "") return ;
     int rowIndex = table->rowCount();
     table->setRowCount(rowIndex + 1);//总行数增加1
     //ui->tableWidget->setRowHeight(rowIndex, 24);//设置行的高度
@@ -57,12 +59,17 @@ void MainWindow::on_sendDir_clicked()
     auto table = ui->tableWidget;
     //openDir = QFileDialog::getOpenFileName(this,"open","./","");
     openDir = QFileDialog::getExistingDirectory(this, "open");
+    if (openDir == "") return ;
+    zip(openDir.toStdString());
     int rowIndex = table->rowCount();
     table->setRowCount(rowIndex + 1);//总行数增加1
-    QTableWidgetItem *item = new QTableWidgetItem(openDir);
-    console->SendFile(openDir.toStdString());
-    //item->setText("item");
+    QString file_name = openDir;
+    file_name = file_name.mid(file_name.lastIndexOf('/')+1, file_name.size());
+    QTableWidgetItem *item = new QTableWidgetItem(file_name);
     table->setItem(rowIndex, 0, item);
+    item = new QTableWidgetItem(QString("sending"));
+    table->setItem(rowIndex, 1, item);
+    console->SendFile(openDir.toStdString());
 }
 
 void MainWindow::NoticeFrontCallBack(std::string fileName, FileSendControl::Type type, QTableWidget *table) {
