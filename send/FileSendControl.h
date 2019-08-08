@@ -49,7 +49,7 @@ public:
   void NoticeFront(std::string file_name, Type type);
   void Run();
   void Sendend(std::unique_ptr<File> file, uint32_t group_ip_local);
-  void Recvend(std::unique_ptr<File> file, uint32_t group_ip_local);
+  void Recvend(std::unique_ptr<File> file);
   //std::string GetEndFileName();
   static FileSendControl* GetInstances() {
     static FileSendControl* project = new FileSendControl("224.0.2.10", 8888);

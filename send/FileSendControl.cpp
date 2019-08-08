@@ -34,8 +34,8 @@ void FileSendControl::Run() {
 
 void FileSendControl::SendFile(std::string file_path) {
   std::lock_guard<std::mutex> lock(mutex_);
-  file_path = zip(file_path);
-  auto file = std::make_unique<File>(file_path);
+  std::string file_name = zip(file_path);
+  auto file = std::make_unique<File>(file_name);
   char buf[kBufSize];
   //找到一个可用的ip
   uint32_t ip_local = kMulticastIpMin;
@@ -48,7 +48,7 @@ void FileSendControl::SendFile(std::string file_path) {
     } else {
       port += 20000;
     }
-    std::string file_name = file->File_name();
+    file_name = file->File_name();
     int file_len = file->File_len();
     *(FileSendControl::Type*)(buf+FileSendControl::kTypeBeg) = FileSendControl::kNewFile;
     *(uint32_t*)(buf+FileSendControl::kGroupIPBeg) = ip_local;
@@ -78,16 +78,28 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
   file_name = file_name.substr(0, file_name.rfind('.'));
   ctl->NoticeFront(file_name, Type::kSendend);
   std::string cmd = "rm -f ";
-  cmd += file->File_path() + file->File_name();
+  //cmd += file->File_path() + file->File_name();
+  cmd += file->File_name();
   system(cmd.c_str());
   std::cout << cmd << std::endl;
-  std::cout << std::flush;
   //std::cout << "delete " << file->File_name() << std::endl;
   file.release();
   //end_que_.push(std::make_pair(std::move(file), group_ip_local));
 }
-void FileSendControl::Recvend(std::unique_ptr<File> file, uint32_t group_ip_local) {
+void FileSendControl::Recvend(std::unique_ptr<File> file) {
   std::lock_guard<std::mutex> lock(mutex_);
+  std::string file_name = unzip(file->File_name(), "./");
+  std::string cmd = "rm -f ";
+  //cmd += file->File_path() + file->File_name();
+  cmd += file->File_name();
+  system(cmd.c_str());
+  std::cout << cmd << std::endl;
+  if (file) {
+    auto ctl = FileSendControl::GetInstances();
+    ctl->NoticeFront(file_name, Type::kRecvend);
+  } else {
+    std::cout << "file_uptr 不可用" << std::endl;
+  }
   auto it = file_is_recving_.find(file->File_name());
   if (it != file_is_recving_.cend()) {
     file_is_recving_.erase(it);
@@ -128,19 +140,9 @@ void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, 
 
 void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr) {
   FileRecv(group_ip, port, file_uptr);
-  std::string file_name = file_uptr->File_name();
-  for (int i = 0; i < 2; ++i) {
-    auto pos = file_name.find_last_of('.');
-    if (pos == -1) break;
-    file_name.erase(pos);
-  }
-  unzip(file_uptr->File_name(), "./");
-  if (file_uptr) {
-    auto ctl = FileSendControl::GetInstances();
-    ctl->NoticeFront(file_name, Type::kRecvend);
-  } else {
-    std::cout << "file_uptr 不可用" << std::endl;
-  }
+  auto ctl = GetInstances();
+  ctl->Recvend(std::move(file_uptr));
+
 }
 
 void FileSendControl::ListenFileRecvCallback(Connecter& con) {

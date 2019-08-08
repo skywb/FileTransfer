@@ -9,6 +9,7 @@
 #include <string>
 #include <memory>
 #include <mutex>
+#include <condition_variable>
 
 const int kPackNumberBeg  = 0;
 const int kFileNameLenBeg = kPackNumberBeg+sizeof(int);
@@ -42,6 +43,7 @@ private:
   int package_count_;    //包数量
   std::vector<bool> lost_;  //丢失记录
   std::mutex lock_;
+  std::condition_variable cond_;
   bool running;
 };
 

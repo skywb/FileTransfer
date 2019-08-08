@@ -34,35 +34,16 @@ bool FileSend(std::string group_ip,
   }
   std::cout << "发送完毕, 开始校验" << std::endl;
   //检查所有的丢包情况， 并重发
-  while (true) {
-    auto lose = losts.GetFileLostedPackage();
-    if (lose.empty()) {
-      /* TODO:  <22-07-19, 王彬> */
-      //等待并检查
-      //告知子线程结束， 并回收子线程
-      //结束
-      //简单使用sleep代替， 应修改
-      const int kSleepTime = 5;
-      sleep(kSleepTime);
-      lose = losts.GetFileLostedPackage();
-      if (lose.empty()) {
-          losts.ExitListen();
-          break;
-      } else {
+  while (!losts.ExitListen()) {
+      auto lose = losts.GetFileLostedPackage();
+      if (!lose.empty()) {
           //重发
           for (auto i : lose) {
-              std::cout << "重发 package_num " << i << std::endl;
-              SendFileDataAtPackNum(con, file_uptr, i);
-          }
+          std::cout << "重发 package_num " << i << std::endl;
+          SendFileDataAtPackNum(con, file_uptr, i);
       }
-    } else {
-        //重发
-        for (auto i : lose) {
-        std::cout << "重发 package_num " << i << std::endl;
-        SendFileDataAtPackNum(con, file_uptr, i); 
-      }
-    }
   }
+ }
 #ifdef DEBUG
   std::cout << "发送文件结束" << std::endl;
 #endif
@@ -165,14 +146,21 @@ std::vector<int> LostPackageVec::GetFileLostedPackage() {
 void LostPackageVec::AddFileLostedRecord(int package_num) {
   std::lock_guard<std::mutex> lock(lock_);
   lost_[package_num] = true;
+  cond_.notify_one();
 }
   //尝试退出子线程, 若没有数据包
   //若没有数据包，则退出子线程，并返回true
   //否则返回false
 bool LostPackageVec::ExitListen() {
-  std::lock_guard<std::mutex> lock(lock_);
-  running = false;
-  return true; 
+  std::unique_lock<std::mutex> lock(lock_);
+  auto t = std::chrono::system_clock::now();
+  t += std::chrono::seconds(5);
+  std::cout << "sleepping..." << std::endl;
+  if (cond_.wait_until(lock, t) == std::cv_status::timeout) {
+      running = false;
+      return true;
+  }
+  return false;
 }
 bool LostPackageVec::isRunning() {
   std::lock_guard<std::mutex> lock(lock_);
