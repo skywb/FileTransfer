@@ -4,6 +4,6 @@
 #include <iostream>
 
 std::string zip(std::string filePath);
-bool unzip(std::string filePath, std::string objPath);
+std::string unzip(std::string filePath, std::string objPath);
 
 #endif /* end of include guard: ZIP_H_8QENUMWN */

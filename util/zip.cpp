@@ -3,26 +3,24 @@
 #include <unistd.h>
 
 std::string zip(std::string filePath) {
-  //auto const pos = filePath.find_last_of('/');
-  //auto file_name = filePath;
-  //if (pos != -1) {
-  //  file_name = filePath.substr(pos);
-  //}
-  //struct stat st;
-  //stat(filePath.c_str(), &st);
+  struct stat st;
+  stat(filePath.c_str(), &st);
+  auto pos = filePath.find_last_of('/');
+  std::string file_name = filePath.substr(pos+1);
+  std::string file_path = filePath.substr(0, pos+1);
   //if (st.st_mode & __S_IFDIR) { //is a dir
-    std::string cmd = "tar -czf ";
-    cmd += filePath + ".tar.gz";
-    cmd += " ";
-    cmd += filePath;
+    std::string cmd = "tar -C ";
+    cmd += file_path + " -czf ";
+    cmd += file_name + ".tar.gz ";
+    cmd += file_name;
     system(cmd.c_str());
     std::cout << cmd << std::endl;
-  //}
+  //
 
-    return filePath+".tar.gz";
+    return file_name+".tar.gz";
 }
 
-bool unzip(std::string filePath, std::string objPath) {
+std::string unzip(std::string filePath, std::string objPath) {
     std::string cmd = "tar -xzf ";
     cmd += filePath;
     cmd += " -C ";
@@ -30,5 +28,11 @@ bool unzip(std::string filePath, std::string objPath) {
     system(cmd.c_str());
     std::cout << cmd << std::endl;
   //}
-  return true;
+    std::string file_name = filePath;
+    for (int i = 0; i < 2; ++i) {
+        auto pos = file_name.find_last_of('.');
+        if (pos == -1) break;
+        file_name.erase(pos);
+    }
+  return file_name;
 }
