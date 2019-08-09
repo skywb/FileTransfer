@@ -10,7 +10,7 @@ public:
   static const int kFileDataMaxLength = 1000;
   static const int kFileNameMaxLen = 100;
 public:
-  File (std::string file_path, int size=0, bool newFile = false);
+  File (std::string file_path, boost::uuids::uuid uuid, int size=0, bool newFile = false);
   virtual ~File ();
 
   std::string File_name() { return file_name_; }
@@ -31,6 +31,7 @@ public:
   bool Check_at_package_number(int package_num);
 private:
   std::string file_path_;   //文件存在的路径
+  boost::uuids::uuid uuid_;
   std::string file_name_;    //文件名
   int filefd_;    //文件描述符
   int file_len_;   //文件长度

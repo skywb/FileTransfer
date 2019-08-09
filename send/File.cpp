@@ -6,7 +6,7 @@
 #include <cstring>
 #include <iostream>
 
-File::File (std::string file_path, int size, bool newFile) : file_path_(file_path), file_len_(size) {
+File::File (std::string file_path,boost::uuids::uuid uuid, int size, bool newFile) : file_path_(file_path), uuid_(uuid), file_len_(size) {
   if (newFile) {
     filefd_ = ::open(file_path.c_str(), O_RDWR | O_CREAT, 0777);
     lseek(filefd_, file_len_-1, SEEK_SET);
