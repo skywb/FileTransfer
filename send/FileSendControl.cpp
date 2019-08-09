@@ -34,7 +34,7 @@ void FileSendControl::Run() {
 
 void FileSendControl::SendFile(std::string file_path) {
   std::lock_guard<std::mutex> lock(mutex_);
-  std::string file_name = zip(file_path);
+  std::string file_name = Zip(file_path);
   auto file = std::make_unique<File>(file_name);
   char buf[kBufSize];
   //找到一个可用的ip
@@ -88,7 +88,7 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
 }
 void FileSendControl::Recvend(std::unique_ptr<File> file) {
   std::lock_guard<std::mutex> lock(mutex_);
-  std::string file_name = unzip(file->File_name(), "./");
+  std::string file_name = Unzip(file->File_name(), "./");
   std::string cmd = "rm -f ";
   //cmd += file->File_path() + file->File_name();
   cmd += file->File_name();
