@@ -8,24 +8,12 @@
 #include "util/Connecter.h"
 
 #include <cstring>
-#include <list>
 #include <arpa/inet.h>
 #include <queue>
 #include <memory>
 #include <mutex>
 #include <thread>
 #include <functional>
-#include <boost/uuid/uuid.hpp>
-
-struct FileNotce {
-  std::string file_name_;
-  boost::uuids::uuid uuid_;
-  int len_ = 0;
-  char buf_[kBufSize];
-  bool end_;
-  std::chrono::time_point<std::chrono::system_clock> clock_;
-};
-
 
 /*
  * 启动一个线程监听是否有文件的发送
@@ -50,8 +38,7 @@ public:
   static const int kGroupIPBeg = kTypeBeg + sizeof(Type);
   static const int kPortBeg = kGroupIPBeg + sizeof(uint32_t);
   static const int kFileLenBeg = kPortBeg + sizeof(int);
-  static const int kFileUUIDBeg = kFileLenBeg + sizeof(int);
-  static const int kFileNameLenBeg = kFileUUIDBeg + sizeof(boost::uuids::uuid);
+  static const int kFileNameLenBeg = kFileLenBeg + sizeof(int);
   static const int kFileNameBeg = kFileNameLenBeg + sizeof(int);
 public:
   virtual ~FileSendControl ();
@@ -60,7 +47,6 @@ public:
       NoticeFront_ = func;
   }
   void NoticeFront(std::string file_name, Type type);
-  void SendNoticeToClient();
   void Run();
   void Sendend(std::unique_ptr<File> file, uint32_t group_ip_local);
   void Recvend(std::unique_ptr<File> file);
@@ -69,12 +55,7 @@ public:
     static FileSendControl* project = new FileSendControl("224.0.2.10", 8888);
     return project;
   }
-  //bool FileIsRecving(std::string file_name);
-  bool FileIsRecving(boost::uuids::uuid file_uuid);
-  void AddRecvingFile(std::unique_ptr<FileNotce> file_notice) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    file_is_recving_.push_back(std::move(file_notice));
-  }
+  bool FileIsRecving(std::string file_name);
   void SetSavePath() = delete;   //留接口，暂不实现
   bool Quit() = delete ;
 private:
@@ -82,9 +63,7 @@ private:
   static void ListenFileRecvCallback(Connecter& con);
   static void FileSendCallback(uint32_t group_ip_net, int port_local, std::unique_ptr<File> file);
   static void RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr);
-  static void SendNoticeToClientCallback();
-private:
-  //std::queue<std::unique_ptr<File>> task_que_;
+  std::queue<std::unique_ptr<File>> task_que_;
   std::mutex mutex_;
   std::string group_ip_;
   int port_;
@@ -92,9 +71,7 @@ private:
   std::thread listen_file_recv_;
   bool running_;
   //std::queue<std::pair<std::unique_ptr<File>, uint32_t>> end_que_;
-  std::list<std::unique_ptr<FileNotce>> file_is_recving_;
-  std::list<std::unique_ptr<FileNotce>> file_is_sending_;
-  //std::map<std::string, bool> file_is_sending_;
+  std::map<std::string, bool> file_is_recving_;
   Connecter con;
   std::function<void(std::string fileName, FileSendControl::Type type)> NoticeFront_;
 };
