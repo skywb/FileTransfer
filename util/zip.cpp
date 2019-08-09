@@ -43,7 +43,7 @@ static void walk_directory(const std::string& startdir, const std::string& input
   ::closedir(dp);
 }
 
-std::string Zipdir(const std::string& inputdir, const std::string& output_filename)
+static std::string Zipdir(const std::string& inputdir, const std::string& output_filename)
 {
   int errorp;
   zip_t *zipper = zip_open(output_filename.c_str(), ZIP_CREATE | ZIP_EXCL, &errorp);
@@ -64,9 +64,11 @@ std::string Zipdir(const std::string& inputdir, const std::string& output_filena
 }
 
 std::string Zip(const std::string& filePath) {
-
-  int errorp;
   std::string zipfile_name = filePath + ".zip";
+  if (is_dir(filePath)) {
+    return Zipdir(filePath, zipfile_name);
+  }
+  int errorp;
   zip_t *zipper = zip_open(zipfile_name.c_str(), ZIP_CREATE | ZIP_EXCL, &errorp);
   if (zipper == nullptr) {
     zip_error_t ziperror;
