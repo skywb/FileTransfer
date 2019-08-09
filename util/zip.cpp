@@ -102,6 +102,8 @@ std::string Unzip(const std::string& filePath, const std::string& savePath)
 	pZip = zip_open(filePath.c_str(), 0, &err);
 	int fileCount;
   std::string start_path = savePath;
+  if (start_path[start_path.size() - 1] != '/')
+      start_path += "/";
   std::string file_path;
 	fileCount = zip_get_num_files(pZip);
   if (fileCount > 1) {
@@ -111,7 +113,7 @@ std::string Unzip(const std::string& filePath, const std::string& savePath)
     system(cmd.c_str());
     mkdir(dirName.c_str(), 0777);
     if (!start_path.empty())
-      start_path = start_path + "/" + dirName;
+      start_path = start_path + dirName;
     else 
       start_path = dirName;
   }
@@ -123,7 +125,7 @@ std::string Unzip(const std::string& filePath, const std::string& savePath)
     if (zipStat.name[strlen(zipStat.name) -1] == '/') {
       std::string cmd = "rm -rf ";
       if (!start_path.empty())
-        file_path = start_path + "/" + zipStat.name;
+        file_path = start_path + zipStat.name;
       else 
         file_path = zipStat.name;
       cmd += file_path.c_str();
@@ -136,7 +138,7 @@ std::string Unzip(const std::string& filePath, const std::string& savePath)
 		zip_fread(pzipFile, buf, zipStat.size);
 		std::fstream fs;
     if (!start_path.empty())
-      file_path = start_path + "/" + zipStat.name;
+      file_path = start_path +  zipStat.name;
     else 
       file_path = zipStat.name;
 		fs.open(file_path.c_str(), std::fstream::binary | std::fstream::out);
