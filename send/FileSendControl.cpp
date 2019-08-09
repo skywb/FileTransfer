@@ -4,6 +4,7 @@
 #include <sys/epoll.h>
 #include <iomanip>
 #include <thread>
+#include <boost/uuid/uuid_generators.hpp>
 
 
 FileSendControl::FileSendControl (std::string group_ip, int port) :
@@ -49,46 +50,51 @@ void FileSendControl::Run() {
 }
 
 void FileSendControl::SendFile(std::string file_path) {
-  std::lock_guard<std::mutex> lock(mutex_);
   std::string file_name = Zip(file_path);
-  auto file = std::make_unique<File>(file_name);
+  auto file = std::make_unique<File>(file_name, boost::uuids::random_generator()());
   auto file_notice = std::make_unique<FileNotce>();
   char *buf = file_notice->buf_;
   //找到一个可用的ip
   uint32_t ip_local = kMulticastIpMin;
-  while(ip_used_[ip_local-kMulticastIpMin] && ip_local <= kMulticastIpMax+1) ++ip_local;
-  if (ip_local <= kMulticastIpMax) {
-    //待改进
-    int port = ip_local - kMulticastIpMin;
-    if (port % 2) {
-      port += 10000;
-    } else {
-      port += 20000;
-    }
-    file_name = file->File_name();
-    int file_len = file->File_len();
-    *(FileSendControl::Type*)(buf+FileSendControl::kTypeBeg) = FileSendControl::kNewFile;
-    *(uint32_t*)(buf+FileSendControl::kGroupIPBeg) = ip_local;
-    *(int*)(buf+FileSendControl::kPortBeg) = port;
-    *(int*)(buf+FileSendControl::kFileLenBeg) = file_len;
-    *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg) = file->UUID();
-    *(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)(file_name.size());
-    strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
-
-    file_notice->len_ = FileSendControl::kFileNameBeg+file_name.size();
-    file_notice->uuid_ = file->UUID();
-    file_is_sending_.push_back(std::move(file_notice));
-    //file_is_sending_[file_name] = true;
-    SendNoticeToClient();
-    std::thread th(FileSendCallback, ip_local, port, std::move(file));
-    th.detach();
-  } else {
+  { std::lock_guard<std::mutex> lock(mutex_);
+    while(ip_used_[ip_local-kMulticastIpMin] && ip_local <= kMulticastIpMax) ++ip_local;
+    if (ip_local >= kMulticastIpMax) {
 #if DEBUG
-    std::cout << "文件过多" << std::endl;
+      std::cout << "文件过多" << std::endl;
 #endif
-    //当文件数量太多时加入队列
-    //task_que_.push(std::make_unique<File>(file_path));
+      //当文件数量太多时加入队列
+      //task_que_.push(std::make_unique<File>(file_path));
+      return;
+    }
+    std::cout << ip_local-kMulticastIpMin << std::endl;
+    ip_used_[ip_local-kMulticastIpMin] = true;
   }
+  int port = ip_local - kMulticastIpMin;
+  if (port % 2) {
+    port += 10000;
+  } else {
+    port += 20000;
+  }
+  file_name = file->File_name();
+  int file_len = file->File_len();
+  *(FileSendControl::Type*)(buf+FileSendControl::kTypeBeg) = FileSendControl::kNewFile;
+  *(uint32_t*)(buf+FileSendControl::kGroupIPBeg) = ip_local;
+  *(int*)(buf+FileSendControl::kPortBeg) = port;
+  *(int*)(buf+FileSendControl::kFileLenBeg) = file_len;
+  *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg) = file->UUID();
+  *(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)(file_name.size());
+  strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
+
+  file_notice->len_ = FileSendControl::kFileNameBeg+file_name.size();
+  file_notice->uuid_ = file->UUID();
+  { std::lock_guard<std::mutex> lock(mutex_);
+    file_is_sending_.push_back(std::move(file_notice));
+  }
+  //file_is_sending_[file_name] = true;
+  SendNoticeToClient();
+  std::cout << "yes" << std::endl;
+  std::thread th(FileSendCallback, ip_local, port, std::move(file));
+  th.detach();
 }
 
 //文件发送结束
@@ -169,7 +175,7 @@ void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, 
   in_addr ip_net;
   memcpy(&ip_net, &ip_net_u, 4);
   std::string ip(inet_ntoa(ip_net));
-  //std::cout << "发送文件 ： ip is " << ip << " port : " << port_local << std::endl;
+  std::cout << "发送文件 ： ip is " << ip << " port : " << port_local << std::endl;
   FileSend(ip, port_local, file);
   //通知已经传输完毕
   auto ctl = FileSendControl::GetInstances();
@@ -209,6 +215,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       /*: 判断是否已经传输 <30-07-19, 王彬> */
       auto conse = FileSendControl::GetInstances();
       if (conse->FileIsRecving(file_uuid)) {
+        std::cout << "已经接收过" << std::endl;
         continue;
       }
       std::string file_name_front(file_name);
@@ -216,7 +223,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
       auto ctl = FileSendControl::GetInstances();
       ctl->NoticeFront(file_name_front, Type::kNewFile);
-      auto file = std::make_unique<File> (file_name, file_len, true);
+      auto file = std::make_unique<File> (file_name, file_uuid, file_len, true);
       auto file_notice = std::make_unique<FileNotce>();
       file_notice->clock_ = std::chrono::system_clock::now();
       file_notice->uuid_ = file_uuid;
