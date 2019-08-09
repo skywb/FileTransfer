@@ -57,10 +57,9 @@ void MainWindow::on_sendDir_clicked()
 {
     QString openDir="";
     auto table = ui->tableWidget;
-    //openDir = QFileDialog::getOpenFileName(this,"open","./","");
     openDir = QFileDialog::getExistingDirectory(this, "open");
     if (openDir == "") return ;
-    zip(openDir.toStdString());
+    //Zip(openDir.toStdString());
     int rowIndex = table->rowCount();
     table->setRowCount(rowIndex + 1);//总行数增加1
     QString file_name = openDir;
