@@ -63,13 +63,21 @@ static std::string Zipdir(const std::string& inputdir, const std::string& output
   return output_filename;
 }
 
-std::string Zip(const std::string& filePath) {
-  std::string zipfile_name = filePath + ".zip";
+std::string Zip(const std::string& filePath, const std::string& savePath) {
+  std::string obj_path = savePath;
+  if (obj_path[obj_path.size()-1] != '/') {
+    obj_path += "/";
+  }
+  auto pos = filePath.find_last_of('/');
+  if (pos == -1) pos = 0;
+  else pos += 1;
+  std::string file_name = filePath.substr(pos);
+  std::string zipfile_name = file_name + ".zip";
   if (is_dir(filePath)) {
-    return Zipdir(filePath, zipfile_name);
+    return Zipdir(filePath, obj_path+zipfile_name);
   }
   int errorp;
-  zip_t *zipper = zip_open(zipfile_name.c_str(), ZIP_CREATE | ZIP_EXCL, &errorp);
+  zip_t *zipper = zip_open((obj_path + zipfile_name).c_str(), ZIP_CREATE | ZIP_EXCL, &errorp);
   if (zipper == nullptr) {
     zip_error_t ziperror;
     zip_error_init_with_code(&ziperror, errorp);
@@ -79,7 +87,7 @@ std::string Zip(const std::string& filePath) {
   if (source == nullptr) {
     throw std::runtime_error("Failed to add file to zip: " + std::string(zip_strerror(zipper)));
   }
-  if (zip_file_add(zipper, filePath.c_str(), source, ZIP_FL_ENC_UTF_8) < 0) {
+  if (zip_file_add(zipper, file_name.c_str(), source, ZIP_FL_ENC_UTF_8) < 0) {
     zip_source_free(source);
     throw std::runtime_error("Failed to add file to zip: " + std::string(zip_strerror(zipper)));
   }
