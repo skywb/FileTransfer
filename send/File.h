@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <boost/uuid/uuid.hpp>
 
 class File
 {
@@ -29,12 +30,14 @@ public:
   //返回为空表示没有包丢失
   std::vector<int> Check();
   bool Check_at_package_number(int package_num);
+  const boost::uuids::uuid& UUID() { return uuid_; }
 private:
   std::string file_path_;   //文件存在的路径
   std::string file_name_;    //文件名
   int filefd_;    //文件描述符
   int file_len_;   //文件长度
   std::vector<bool> pack_is_recved_;
+  boost::uuids::uuid uuid_;
 };
 
 #endif /* end of include guard: FILE_H_WTYE42R3 */

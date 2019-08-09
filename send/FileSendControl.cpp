@@ -3,6 +3,7 @@
 #include <utility>
 #include <sys/epoll.h>
 #include <iomanip>
+#include <thread>
 
 
 FileSendControl::FileSendControl (std::string group_ip, int port) :
@@ -24,19 +25,35 @@ FileSendControl::~FileSendControl () {
   //  delete i.second;
   //}
 }
+
+static void funCallback() {
+  auto time_clock = std::chrono::system_clock::now();
+  auto ctl = FileSendControl::GetInstances();
+  while (true) {
+    time_clock += std::chrono::milliseconds(500);
+    ctl->SendNoticeToClient();
+    std::this_thread::sleep_until(time_clock);
+  }
+
+}
+
 void FileSendControl::Run() {
   std::lock_guard<std::mutex> lock(mutex_);
   if (running_) return;
   std::thread local_t(ListenFileRecvCallback, std::ref(con));
   listen_file_recv_.swap(local_t);
   running_ = true;
+  //定时500毫秒发送一次所有正在发送的文件的信息
+  std::thread send_notices_to_client_thread(funCallback);
+  send_notices_to_client_thread.detach();
 }
 
 void FileSendControl::SendFile(std::string file_path) {
   std::lock_guard<std::mutex> lock(mutex_);
   std::string file_name = Zip(file_path);
   auto file = std::make_unique<File>(file_name);
-  char buf[kBufSize];
+  auto file_notice = std::make_unique<FileNotce>();
+  char *buf = file_notice->buf_;
   //找到一个可用的ip
   uint32_t ip_local = kMulticastIpMin;
   while(ip_used_[ip_local-kMulticastIpMin] && ip_local <= kMulticastIpMax+1) ++ip_local;
@@ -54,9 +71,15 @@ void FileSendControl::SendFile(std::string file_path) {
     *(uint32_t*)(buf+FileSendControl::kGroupIPBeg) = ip_local;
     *(int*)(buf+FileSendControl::kPortBeg) = port;
     *(int*)(buf+FileSendControl::kFileLenBeg) = file_len;
+    *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg) = file->UUID();
     *(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)(file_name.size());
     strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
-    con.Send(buf, FileSendControl::kFileNameBeg+file_name.size());
+
+    file_notice->len_ = FileSendControl::kFileNameBeg+file_name.size();
+    file_notice->uuid_ = file->UUID();
+    file_is_sending_.push_back(std::move(file_notice));
+    //file_is_sending_[file_name] = true;
+    SendNoticeToClient();
     std::thread th(FileSendCallback, ip_local, port, std::move(file));
     th.detach();
   } else {
@@ -76,6 +99,13 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
   std::string file_name = file->File_name();
   file_name = file_name.substr(0, file_name.rfind('.'));
   file_name = file_name.substr(0, file_name.rfind('.'));
+  for (auto it = file_is_sending_.begin(); it != file_is_sending_.end(); ++it) {
+    if ((*it)->uuid_ == file->UUID()) {
+      it->release();
+      file_is_sending_.erase(it);
+      break;
+    }
+  }
   ctl->NoticeFront(file_name, Type::kSendend);
   std::string cmd = "rm -f ";
   //cmd += file->File_path() + file->File_name();
@@ -86,6 +116,7 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
   file.release();
   //end_que_.push(std::make_pair(std::move(file), group_ip_local));
 }
+
 void FileSendControl::Recvend(std::unique_ptr<File> file) {
   std::lock_guard<std::mutex> lock(mutex_);
   std::string file_name = Unzip(file->File_name(), "./");
@@ -100,10 +131,16 @@ void FileSendControl::Recvend(std::unique_ptr<File> file) {
   } else {
     std::cout << "file_uptr 不可用" << std::endl;
   }
-  auto it = file_is_recving_.find(file->File_name());
-  if (it != file_is_recving_.cend()) {
-    file_is_recving_.erase(it);
+  for (auto it = file_is_recving_.begin(); it != file_is_recving_.end(); ++it) {
+    if ((*it)->uuid_ == file->UUID()) {
+      (*it)->end_ = true;
+      break;
+    }
   }
+  //auto it = file_is_recving_.find(file->File_name());
+  //if (it != file_is_recving_.cend()) {
+  //  file_is_recving_.erase(it);
+  //}
 }
 
 //std::string FileSendControl::GetEndFileName() {
@@ -116,14 +153,15 @@ void FileSendControl::Recvend(std::unique_ptr<File> file) {
 //  return filename;
 //}
 
-bool FileSendControl::FileIsRecving(std::string file_name) {
+bool FileSendControl::FileIsRecving(boost::uuids::uuid file_uuid) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto it = file_is_recving_.find(file_name);
-  if (it == file_is_recving_.cend() || it->second == false) {
-    file_is_recving_[file_name] = true;
-    return false;
+  for (auto it = file_is_recving_.begin(); it != file_is_recving_.end(); ++it) {
+    if ((*it)->uuid_ == file_uuid) {
+      (*it)->clock_ = std::chrono::system_clock::now();
+      return true;
+    }
   }
-  return true;
+  return false;
 }
 
 void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, std::unique_ptr<File> file) {
@@ -147,6 +185,7 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
 
 void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   char buf[kBufSize];
+  boost::uuids::uuid file_uuid;
   while (true) {
     memset(buf, 0, kBufSize);
     int cnt = con.Recv(buf, kBufSize, 3000);
@@ -162,13 +201,14 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       uint32_t ip_local = *(uint32_t*)(buf+kGroupIPBeg);
       int port_recv = *(int*)(buf+kPortBeg);
       int filename_len = *(int*)(buf+FileSendControl::kFileNameLenBeg);
+      file_uuid = *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg);
       int file_len = *(int*)(buf+FileSendControl::kFileLenBeg);
       char file_name[File::kFileNameMaxLen];
       strncpy(file_name, buf+FileSendControl::kFileNameBeg, File::kFileNameMaxLen);
       file_name[filename_len] = 0;
       /*: 判断是否已经传输 <30-07-19, 王彬> */
       auto conse = FileSendControl::GetInstances();
-      if (conse->FileIsRecving(file_name)) {
+      if (conse->FileIsRecving(file_uuid)) {
         continue;
       }
       std::string file_name_front(file_name);
@@ -177,6 +217,12 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       auto ctl = FileSendControl::GetInstances();
       ctl->NoticeFront(file_name_front, Type::kNewFile);
       auto file = std::make_unique<File> (file_name, file_len, true);
+      auto file_notice = std::make_unique<FileNotce>();
+      file_notice->clock_ = std::chrono::system_clock::now();
+      file_notice->uuid_ = file_uuid;
+      file_notice->file_name_ = file->File_name();
+      file_notice->end_ = false;
+      ctl->AddRecvingFile(std::move(file_notice));
       //转地址
       uint32_t ip_net = htonl(ip_local);
       in_addr ip_addr;
@@ -184,6 +230,22 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       std::string ip(inet_ntoa(ip_addr));
       std::thread file_recv_thread(RecvFile, ip, port_recv, std::move(file));
       file_recv_thread.detach();
+    }
+  }
+}
+
+/* 向通知组发送自己所有正在发送的文件的信息
+ * 检查所有已失效的uuid， 并删除
+ */
+void FileSendControl::SendNoticeToClient() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  for (auto& i : file_is_sending_) {
+    con.Send(i->buf_, i->len_);
+  }
+  for (auto it = file_is_recving_.begin(); it != file_is_recving_.end(); ++it) {
+    while (std::chrono::system_clock::now() - (*it)->clock_ > std::chrono::seconds(10)) {
+      it->release();
+      it = file_is_recving_.erase(it);
     }
   }
 }
