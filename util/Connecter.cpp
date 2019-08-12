@@ -13,19 +13,18 @@ Connecter::Connecter (std::string group_ip, int port) {
   auto addr = new sockaddr_in();
   for (int i = 0; i < ip_vec.size(); ++i) {
     int sockfd;
-    //int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     not_Listen_ip_[inet_addr(ip_vec[i].c_str())] = true;
 //#ifdef __WIN32__
 //    if (Bind(addr, &sockfd, ip_vec[i], port)) {             //Linux 不接 发  Win   发  接
 //#elif __LINUX__
 //#else
+    //绑定成功则加入组播地址， 否则忽略该ip
     if (Bind(addr, &sockfd, group_ip, port)) {            //Linux 接  发      Win  绑定失败
 //#endif
       if (true == JoinGroup(&sockfd, group_ip, ip_vec[i])) {
         std::cout << ip_vec[i] << "加入组播成功" << std::endl;
         sockets.push_back(sockfd);
       }
-    } else {
     }
   }
   delete addr;

@@ -8,13 +8,15 @@
 #include <sys/epoll.h>
 #include <mutex>
 
-
-class Connecter
-{
+class Connecter {
 public:
   Connecter (std::string group_ip, int port);
   virtual ~Connecter ();
+  /* 接收消息， 写到缓冲区中， 最大写了长度，
+   * 设置超时退出， 设为-1则阻塞等待
+   */
   int Recv(char* buf, int len, int timeout);
+  /* 发送数据 */
   int Send(char* buf, int len);
 private:
   std::vector<int> sockets;
