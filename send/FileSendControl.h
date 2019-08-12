@@ -40,7 +40,8 @@ public:
     kAlive = 2,
     kReSend = 3,
     kRecvend = 4,
-    kSendend = 5
+    kSendend = 5,
+    kNewSendFile = 6
   };
   //224.0.0.10
   static const uint32_t kMulticastIpMin = 3758096897;
@@ -56,10 +57,14 @@ public:
 public:
   virtual ~FileSendControl ();
   void SendFile(std::string file_path);
-  void RegistNoticeFrontCallBack(std::function<void(std::string, FileSendControl::Type)> func) {
+  void RegistNoticeFrontCallBack(std::function<void(const boost::uuids::uuid,
+                                                    const FileSendControl::Type,
+                                                    const std::vector<std::string>)> func) {
       NoticeFront_ = func;
   }
-  void NoticeFront(std::string file_name, Type type);
+  void NoticeFront(const boost::uuids::uuid file_uuid,
+                   const FileSendControl::Type type,
+                   const std::vector<std::string> msg = std::vector<std::string>());
   void SendNoticeToClient();
   void Run();
   void Sendend(std::unique_ptr<File> file, uint32_t group_ip_local);
@@ -96,7 +101,9 @@ private:
   std::list<std::unique_ptr<FileNotce>> file_is_sending_;
   //std::map<std::string, bool> file_is_sending_;
   Connecter con;
-  std::function<void(std::string fileName, FileSendControl::Type type)> NoticeFront_;
+  std::function<void(const boost::uuids::uuid file_uuid,
+                     const FileSendControl::Type type,
+                     const std::vector<std::string>)> NoticeFront_;
 };
 
 

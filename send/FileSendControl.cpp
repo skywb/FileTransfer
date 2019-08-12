@@ -51,7 +51,8 @@ void FileSendControl::Run() {
 
 void FileSendControl::SendFile(std::string file_path) {
   std::string file_name = Zip(file_path);
-  auto file = std::make_unique<File>(file_name, boost::uuids::random_generator()());
+  auto file_uuid = boost::uuids::random_generator()();
+  auto file = std::make_unique<File>(file_name, file_uuid);
   auto file_notice = std::make_unique<FileNotce>();
   char *buf = file_notice->buf_;
   //找到一个可用的ip
@@ -64,11 +65,15 @@ void FileSendControl::SendFile(std::string file_path) {
 #endif
       //当文件数量太多时加入队列
       //task_que_.push(std::make_unique<File>(file_path));
-      return;
+      return ;
     }
     std::cout << ip_local-kMulticastIpMin << std::endl;
     ip_used_[ip_local-kMulticastIpMin] = true;
   }
+  std::vector<std::string> msg;
+  file_name = file->File_name();
+  msg.push_back(file_name.substr(0, file_name.find_last_of('.')));
+  NoticeFront(file_uuid, kNewSendFile, msg);
   int port = ip_local - kMulticastIpMin;
   if (port % 2) {
     port += 10000;
@@ -112,7 +117,7 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
       break;
     }
   }
-  ctl->NoticeFront(file_name, Type::kSendend);
+  ctl->NoticeFront(file->UUID(), Type::kSendend);
   std::string cmd = "rm -f ";
   //cmd += file->File_path() + file->File_name();
   cmd += file->File_name();
@@ -133,7 +138,7 @@ void FileSendControl::Recvend(std::unique_ptr<File> file) {
   std::cout << cmd << std::endl;
   if (file) {
     auto ctl = FileSendControl::GetInstances();
-    ctl->NoticeFront(file_name, Type::kRecvend);
+    ctl->NoticeFront(file->UUID(), Type::kRecvend);
   } else {
     std::cout << "file_uptr 不可用" << std::endl;
   }
@@ -222,7 +227,9 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
       auto ctl = FileSendControl::GetInstances();
-      ctl->NoticeFront(file_name_front, Type::kNewFile);
+      std::vector<std::string> msg;
+      msg.push_back(file_name_front);
+      ctl->NoticeFront(file_uuid, Type::kNewFile, msg);
       auto file = std::make_unique<File> (file_name, file_uuid, file_len, true);
       auto file_notice = std::make_unique<FileNotce>();
       file_notice->clock_ = std::chrono::system_clock::now();
@@ -257,6 +264,8 @@ void FileSendControl::SendNoticeToClient() {
   }
 }
 
-void FileSendControl::NoticeFront(std::string file_name, Type type) {
-    NoticeFront_(file_name, type);
+void FileSendControl::NoticeFront(const boost::uuids::uuid file_uuid,
+                                  const FileSendControl::Type type,
+                                  std::vector<std::string> msg) {
+    NoticeFront_(file_uuid, type, msg);
 }
