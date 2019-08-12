@@ -250,7 +250,7 @@ void FileSendControl::SendNoticeToClient() {
     con.Send(i->buf_, i->len_);
   }
   for (auto it = file_is_recving_.begin(); it != file_is_recving_.end(); ++it) {
-    while (std::chrono::system_clock::now() - (*it)->clock_ > std::chrono::seconds(10)) {
+    if (std::chrono::system_clock::now() - (*it)->clock_ > std::chrono::seconds(10)) {
       it->release();
       it = file_is_recving_.erase(it);
     }
