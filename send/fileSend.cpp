@@ -26,7 +26,7 @@ bool FileSend(std::string group_ip,
   Connecter con(group_ip, port);
   LostPackageVec losts(file_uptr->File_max_packages());
   //启动一个线程，监听丢失的包
-  std::thread listen(ListenLostPackage, port+1, std::ref(losts), std::ref(con)); //修改端口， 参数： socket， addr, losts
+  std::thread listen(ListenLostPackageCallback, port+1, std::ref(losts), std::ref(con)); //修改端口， 参数： socket， addr, losts
   //设置多播地址
   //发送文件内容
   for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
@@ -63,10 +63,6 @@ void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
   ::strncpy(buf+kFileNameBeg, file_name, File::kFileNameMaxLen);
   *(int*)(buf+kFileLenBeg) = file->File_len();
   con.Send(buf, kFileLenBeg+sizeof(kFileDataLenBeg));
-  //int send_len = sendto(sockfd, buf, kFileLenBeg+sizeof(kFileDataLenBeg), 0, (struct sockaddr *)addr, sizeof(*addr));
-  //if (-1 == send_len) {
-  //  std::cerr << strerror(errno) << std::endl;
-  //}
 }
 
 /*
@@ -104,7 +100,7 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
  * 保存到LostPackageVec中
  * 线程任务
  */
-void ListenLostPackage(int port, LostPackageVec& losts, Connecter& con) {
+void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) {
   char buf[kBufSize];
   while (losts.isRunning()) {
     int re = con.Recv(buf, kBufSize, 1000);
@@ -148,9 +144,11 @@ void LostPackageVec::AddFileLostedRecord(int package_num) {
   lost_[package_num] = true;
   cond_.notify_one();
 }
-  //尝试退出子线程, 若没有数据包
-  //若没有数据包，则退出子线程，并返回true
-  //否则返回false
+
+/* 尝试退出子线程, 若没有数据包
+ * 若没有数据包，则退出子线程，并返回true
+ * 否则返回false
+ */
 bool LostPackageVec::ExitListen() {
   std::unique_lock<std::mutex> lock(lock_);
   auto t = std::chrono::system_clock::now();
@@ -162,6 +160,7 @@ bool LostPackageVec::ExitListen() {
   }
   return false;
 }
+
 bool LostPackageVec::isRunning() {
   std::lock_guard<std::mutex> lock(lock_);
   return  running;

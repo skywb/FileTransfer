@@ -4,6 +4,7 @@
 #include <sys/epoll.h>
 #include <iomanip>
 #include <thread>
+#include <arpa/inet.h>
 #include <boost/uuid/uuid_generators.hpp>
 
 
@@ -21,13 +22,11 @@ FileSendControl::FileSendControl (std::string group_ip, int port) :
   ip_used_[ip_local-kMulticastIpMin] = true;
 }
 
-FileSendControl::~FileSendControl () {
-  //for (auto i : group_addrs) {
-  //  delete i.second;
-  //}
-}
+FileSendControl::~FileSendControl () { }
 
-static void funCallback() {
+
+/* 通知线程， 每500ms发送一次所有正在发送的文件的信息 */
+static void NoticeCallback() {
   auto time_clock = std::chrono::system_clock::now();
   auto ctl = FileSendControl::GetInstances();
   while (true) {
@@ -35,9 +34,9 @@ static void funCallback() {
     ctl->SendNoticeToClient();
     std::this_thread::sleep_until(time_clock);
   }
-
 }
 
+/* 开始监听和发送文件, 只能调用一次, 用于运行伴随对象启动的线程 */
 void FileSendControl::Run() {
   std::lock_guard<std::mutex> lock(mutex_);
   if (running_) return;
@@ -45,16 +44,21 @@ void FileSendControl::Run() {
   listen_file_recv_.swap(local_t);
   running_ = true;
   //定时500毫秒发送一次所有正在发送的文件的信息
-  std::thread send_notices_to_client_thread(funCallback);
+  std::thread send_notices_to_client_thread(NoticeCallback);
   send_notices_to_client_thread.detach();
 }
 
+/* 发送文件， 传入的参数是一个文件地址， 该文件必须时存在的
+ * 会在压缩到当前文件夹下， 然后再启动一个线程去发送该文件
+ */
 void FileSendControl::SendFile(std::string file_path) {
+  //压缩后的文件名， 带.zip, 路径为该程序运行时路径
   std::string file_name = Zip(file_path);
+  //生成一个uuid
   auto file_uuid = boost::uuids::random_generator()();
   auto file = std::make_unique<File>(file_name, file_uuid);
   auto file_notice = std::make_unique<FileNotce>();
-  char *buf = file_notice->buf_;
+  char *const buf = file_notice->buf_;
   //找到一个可用的ip
   uint32_t ip_local = kMulticastIpMin;
   { std::lock_guard<std::mutex> lock(mutex_);
@@ -63,15 +67,17 @@ void FileSendControl::SendFile(std::string file_path) {
 #if DEBUG
       std::cout << "文件过多" << std::endl;
 #endif
-      //当文件数量太多时加入队列
-      //task_que_.push(std::make_unique<File>(file_path));
+      /* TODO: 文件发送过快时将任务加入队列 <12-08-19, 王彬> */
       return ;
     }
     std::cout << ip_local-kMulticastIpMin << std::endl;
     ip_used_[ip_local-kMulticastIpMin] = true;
   }
+  //通知前端时附带的信息
   std::vector<std::string> msg;
+  //获取文件名, 带.zip后缀
   file_name = file->File_name();
+  //获取到的文件名带.zip, 去掉该后缀名
   msg.push_back(file_name.substr(0, file_name.find_last_of('.')));
   NoticeFront(file_uuid, kNewSendFile, msg);
   int port = ip_local - kMulticastIpMin;
@@ -80,6 +86,7 @@ void FileSendControl::SendFile(std::string file_path) {
   } else {
     port += 20000;
   }
+  //将要发送的数据按照协议格式写入缓冲区中
   file_name = file->File_name();
   int file_len = file->File_len();
   *(FileSendControl::Type*)(buf+FileSendControl::kTypeBeg) = FileSendControl::kNewFile;
@@ -89,27 +96,31 @@ void FileSendControl::SendFile(std::string file_path) {
   *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg) = file->UUID();
   *(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)(file_name.size());
   strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
-
+  //设置正在发送文件的信息
   file_notice->len_ = FileSendControl::kFileNameBeg+file_name.size();
   file_notice->uuid_ = file->UUID();
   { std::lock_guard<std::mutex> lock(mutex_);
     file_is_sending_.push_back(std::move(file_notice));
   }
-  //file_is_sending_[file_name] = true;
+  //发送之前主动通知一次, 用于使接收端第一时间可以加入发送的组播地址，
+  //避免前面几个数据包需要重传
   SendNoticeToClient();
-  std::cout << "yes" << std::endl;
+  //启动文件发送的线程，开始发送文件
   std::thread th(FileSendCallback, ip_local, port, std::move(file));
   th.detach();
 }
 
-//文件发送结束
+/* 文件发送结束， 处理相关的资源和通知
+ */
 void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_local) {
   std::lock_guard<std::mutex> lock(mutex_);
+  //释放占用的组播地址
   ip_used_[group_ip_local-kMulticastIpMin] = false;
   auto ctl = GetInstances();
   std::string file_name = file->File_name();
   file_name = file_name.substr(0, file_name.rfind('.'));
-  file_name = file_name.substr(0, file_name.rfind('.'));
+  //file_name = file_name.substr(0, file_name.rfind('.'));
+  //修改该文件的发送状态， 通知线程会停止发送该文件的发送通知
   for (auto it = file_is_sending_.begin(); it != file_is_sending_.end(); ++it) {
     if ((*it)->uuid_ == file->UUID()) {
       it->release();
@@ -118,24 +129,21 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
     }
   }
   ctl->NoticeFront(file->UUID(), Type::kSendend);
+  //删除产生的临时压缩文件
   std::string cmd = "rm -f ";
-  //cmd += file->File_path() + file->File_name();
   cmd += file->File_name();
   system(cmd.c_str());
-  std::cout << cmd << std::endl;
   //std::cout << "delete " << file->File_name() << std::endl;
   file.release();
-  //end_que_.push(std::make_pair(std::move(file), group_ip_local));
 }
 
 void FileSendControl::Recvend(std::unique_ptr<File> file) {
   std::lock_guard<std::mutex> lock(mutex_);
   std::string file_name = Unzip(file->File_name(), "./");
+  //删除已经存在的文件
   std::string cmd = "rm -f ";
-  //cmd += file->File_path() + file->File_name();
   cmd += file->File_name();
   system(cmd.c_str());
-  std::cout << cmd << std::endl;
   if (file) {
     auto ctl = FileSendControl::GetInstances();
     ctl->NoticeFront(file->UUID(), Type::kRecvend);
@@ -148,22 +156,14 @@ void FileSendControl::Recvend(std::unique_ptr<File> file) {
       break;
     }
   }
-  //auto it = file_is_recving_.find(file->File_name());
-  //if (it != file_is_recving_.cend()) {
-  //  file_is_recving_.erase(it);
-  //}
 }
 
-//std::string FileSendControl::GetEndFileName() {
-//  std::lock_guard<std::mutex> lock_guard(mutex_);
-//  if (end_que_.empty()) return std::string();
-//  auto endfile = std::move(end_que_.front());
-//  end_que_.pop();
-//  std::string filename = endfile.first->File_name();
-//  endfile.first.release();
-//  return filename;
-//}
-
+/* 检查文件的是否时接收状态
+ * 同时会把该文件的维护时间状态刷新
+ * 文件超过10秒中没有刷新会删除该记录
+ * 警告： 不可频繁刷新或不停获取状态， 否则会导致该记录无法删除造成资源泄露
+ * 目前只在接收到新文件通知时调用该方法
+ */
 bool FileSendControl::FileIsRecving(boost::uuids::uuid file_uuid) {
   std::lock_guard<std::mutex> lock(mutex_);
   for (auto it = file_is_recving_.begin(); it != file_is_recving_.end(); ++it) {
@@ -175,6 +175,7 @@ bool FileSendControl::FileIsRecving(boost::uuids::uuid file_uuid) {
   return false;
 }
 
+/* 发送新的文件， file必须时已经打开的File */
 void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, std::unique_ptr<File> file) {
   ulong ip_net_u = htonl(group_ip_local);
   in_addr ip_net;
@@ -182,7 +183,6 @@ void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, 
   std::string ip(inet_ntoa(ip_net));
   std::cout << "发送文件 ： ip is " << ip << " port : " << port_local << std::endl;
   FileSend(ip, port_local, file);
-  //通知已经传输完毕
   auto ctl = FileSendControl::GetInstances();
   ctl->Sendend(std::move(file), group_ip_local);
 }
@@ -194,11 +194,19 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
 
 }
 
+/* 接听接收文件的线程回调函数，干线程伴随程序一直运行
+ * 传入一个连接器， 接收到新文件的通知时， 自动生成一个uuid标识该文件
+ * 启动一个线程接收该文件， 并通知前端
+ * 当接收到同一个文件请求时，忽略该文件请求
+ * 一个见的记录超过10秒中没有刷新， 则认为该发送端已停止发送， 删除该记录
+ */
 void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   char buf[kBufSize];
   boost::uuids::uuid file_uuid;
   while (true) {
     memset(buf, 0, kBufSize);
+    //3秒中超时等待， 如果没有数据什么也不做
+    //可设置为-1 阻塞等待， 为了留下退出运行的接口,设为可超时
     int cnt = con.Recv(buf, kBufSize, 3000);
     if (cnt == -1) {
       continue;
@@ -209,6 +217,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       if (type != FileSendControl::kNewFile) {
         std::cout << "type != kNewFile" << std::endl;
       }
+      //按照协议格式读取数据
       uint32_t ip_local = *(uint32_t*)(buf+kGroupIPBeg);
       int port_recv = *(int*)(buf+kPortBeg);
       int filename_len = *(int*)(buf+FileSendControl::kFileNameLenBeg);
@@ -219,10 +228,10 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       file_name[filename_len] = 0;
       /*: 判断是否已经传输 <30-07-19, 王彬> */
       auto conse = FileSendControl::GetInstances();
-      if (conse->FileIsRecving(file_uuid)) {
-        std::cout << "已经接收过" << std::endl;
+      if (conse->FileIsRecving(file_uuid)) {   //文件已经接收
         continue;
       }
+      //通知前端
       std::string file_name_front(file_name);
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
@@ -231,6 +240,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       msg.push_back(file_name_front);
       ctl->NoticeFront(file_uuid, Type::kNewFile, msg);
       auto file = std::make_unique<File> (file_name, file_uuid, file_len, true);
+      //保存文件信息
       auto file_notice = std::make_unique<FileNotce>();
       file_notice->clock_ = std::chrono::system_clock::now();
       file_notice->uuid_ = file_uuid;
@@ -242,6 +252,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       in_addr ip_addr;
       memcpy(&ip_addr, &ip_net, sizeof(in_addr));
       std::string ip(inet_ntoa(ip_addr));
+      //开启一个新线程接收文件
       std::thread file_recv_thread(RecvFile, ip, port_recv, std::move(file));
       file_recv_thread.detach();
     }
@@ -264,6 +275,7 @@ void FileSendControl::SendNoticeToClient() {
   }
 }
 
+//调用通知前端的回调函数
 void FileSendControl::NoticeFront(const boost::uuids::uuid file_uuid,
                                   const FileSendControl::Type type,
                                   std::vector<std::string> msg) {

@@ -17,11 +17,10 @@
 #include <thread>
 
 
-///*
-// * 从sockfd读内容， 判断是否为本文件， 写入文件
-// * 计算平均传输时间， 设置定时器， 当超过两倍时间没有发送时， 发送丢包重传请求
-// */
-
+/* 请求重发包号为package_num的数据包的 请求信息写入缓冲buf
+ * buf为缓冲区，该方法只提供写入缓冲，不提供发送功能
+ * 将要发送的信息写入缓冲中
+ */
 static int RequestResendSetbuf(int package_num, char* buf) {
     std::cout << "request " << package_num << std::endl;
     *(FileSendControl::Type*)buf = FileSendControl::Type::kReSend;
@@ -29,7 +28,14 @@ static int RequestResendSetbuf(int package_num, char* buf) {
     return sizeof (FileSendControl::Type) + sizeof (package_num);
 }
 
-
+/* 加入指定的组播地址和端口， 接收一个文件，file_uptr必须为已经打开的状态
+ * 创建一个连接到该组播地址的Connecter
+ * 接收到数据包之后进行检查数据包，如果该包已经接收过则丢弃，否则写入文件
+ * 检查：
+ *    当500ms没有数据到来时，可能发送端已经发送完或者断开连接的状态， 则检查
+ *    本地文件的接收状态，发送确实的包序号，等待发送端重发
+ *TODO: 判断断开连接的状态，重连
+ */
 bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) {
   Connecter con(group_ip, port);
   char buf[kBufSize]; //接收缓冲区
@@ -39,10 +45,10 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   for (int i = 0; ; ++i) {
     recv_len = con.Recv(buf, kBufSize, 500);
     //模拟丢包
-    if (Abandon(30)) {
-        std::cout << "主动丢包" << std::endl;
-        continue;
-    }
+    //if (Abandon(30)) {
+    //    std::cout << "主动丢包" << std::endl;
+    //    continue;
+    //}
     if (recv_len > 0) {  //数据到来
       buf[recv_len] = 0;
       int pack_num = *(int*)(buf+kPackNumberBeg);

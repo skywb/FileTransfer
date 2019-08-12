@@ -5,10 +5,10 @@
 
 #include <memory>
 
-//void FileRecv (const int sockfd, const sockaddr_in* addr, std::string save_path = std::string());
-//传入一个绑定过的套接字和对应的组播地址
-//接收数据并写入文件
-//void FileRecv (const int sockfd, const sockaddr_in* addr, std::unique_ptr<File>& file_uptr);
+/* 加入指定的组播地址和端口，并接收一个文件， 其中file_uptr必须为打开的可用的状态
+ * 数据会自动写入文件， 但是不会关闭file_uptr
+ * 默认返回true， 出错返回false
+ */
 bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr);
 
 #endif /* end of include guard: FILERECV_H_9Y46TCUG */
