@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <boost/uuid/uuid.hpp>
 
 class File
 {
@@ -29,6 +30,7 @@ public:
   //返回为空表示没有包丢失
   std::vector<int> Check();
   bool Check_at_package_number(int package_num);
+  const boost::uuids::uuid& UUID() { return uuid_; }
 private:
   std::string file_path_;   //文件存在的路径
   boost::uuids::uuid uuid_;
