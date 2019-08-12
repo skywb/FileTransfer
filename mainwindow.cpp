@@ -124,7 +124,8 @@ void MainWindow::NoticeFrontCallBack(const boost::uuids::uuid file_uuid,
         }
         table->setItem(rowIndex, 0, item_file);
         table->setItem(rowIndex, 1, item_stat);
+        break;
     default :
-        qDebug() << "not found type";
+        qDebug() << "not found type in NoticeFrontCallBack() " << type;
     }
 }
