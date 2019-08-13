@@ -12,8 +12,7 @@
 #include <boost/uuid/uuid.hpp>
 
 
-class Proto
-{
+class Proto {
 public:
   enum Type {
     kUnavailable = 0,    //新的文件
@@ -44,7 +43,10 @@ public:
   void set_port(int port) { *(int*)(buf_+kPortBeg) = port; }
   void set_file_len(int len) { *(int*)(buf_+kFileLenBeg) = len; }
   void set_uuid(boost::uuids::uuid uuid) { *(boost::uuids::uuid*)(buf_+kFileUUIDBeg) = uuid; }
-  void set_file_name(std::string filename) { strncpy(buf_+kFileNameBeg, filename.c_str(), 100); *(int*)(buf_+kFileNameLenBeg) = filename.length();}
+  void set_file_name(std::string filename) {
+    strncpy(buf_+kFileNameBeg, filename.c_str(), 100);
+    *(int*)(buf_+kFileNameLenBeg) = filename.length();
+  }
   void set_package_number(int package_num) { *(int*)(buf_+kPackNumberBeg) = package_num; }
   void set_file_data_len(int len) { *(int*)(buf_+kFileDataLenBeg) = len; }
   //void set_file_data(const char* data) { memcpy(buf_+kFileDataBeg, data, file_data_len_); }
@@ -54,7 +56,9 @@ public:
   const int port() const { return *(int*)(buf_+kPortBeg); }
   const boost::uuids::uuid& uuid() const { return *(boost::uuids::uuid*)(buf_+kFileUUIDBeg); }
   const int file_len() const { return *(int*)(buf_+kFileLenBeg); }
-  const std::string file_name() const  { return std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg)); }
+  const std::string file_name() const  {
+    return std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg)); 
+  }
   const int package_numbuer() const  { return *(int*)(buf_+kPackNumberBeg); }
   const int file_data_len() const { return *(int*)(buf_+kFileDataLenBeg); }
   const int get_send_len() const;
@@ -100,7 +104,8 @@ public:
     kNewFile = 1,    //接收的新的文件
     kRecvend = 2,    // 接收完毕
     kSendend = 3,    // 发送完毕
-    kNewSendFile = 4
+    kNewSendFile = 4,
+    kClientExec = 5
   };
 
   static const uint32_t kMulticastIpMin = 3758096897; //224.0.0.10

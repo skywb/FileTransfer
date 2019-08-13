@@ -125,6 +125,24 @@ void MainWindow::NoticeFrontCallBack(const boost::uuids::uuid file_uuid,
         table->setItem(rowIndex, 0, item_file);
         table->setItem(rowIndex, 1, item_stat);
         break;
+    case FileSendControl::kClientExec:
+        {std::lock_guard<std::mutex> lock(window->mutex_);
+            auto it = window->index_.find(file_uuid);
+            if (it != window->index_.end()) {
+                rowIndex = window->index_[file_uuid];
+                window->index_.erase(it);
+            } else {
+                break;
+            }
+        }  //end lock
+        item_file = table->item(rowIndex, 0);
+        if (item_file) {
+            item_stat = table->item(rowIndex, 1);
+        }
+        if (item_stat) {
+            item_stat->setText("all Receive end quit");
+        }
+        break;
     default :
         qDebug() << "not found type in NoticeFrontCallBack() " << type;
     }

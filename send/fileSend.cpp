@@ -10,8 +10,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <thread>
-
-#include <iostream>
+#include <chrono>
 
 /*
  * 文件的发送
@@ -31,22 +30,22 @@ bool FileSend(std::string group_ip,
   //发送文件内容
   for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
     SendFileDataAtPackNum(con, file_uptr, i); 
+    if (!losts.isRunning()) {
+      return false;
+    }
   }
   std::cout << "发送完毕, 开始校验" << std::endl;
   //检查所有的丢包情况， 并重发
   while (!losts.ExitListen()) {
-      auto lose = losts.GetFileLostedPackage();
-      if (!lose.empty()) {
-          //重发
-          for (auto i : lose) {
-          std::cout << "重发 package_num " << i << std::endl;
-          SendFileDataAtPackNum(con, file_uptr, i);
+    auto lose = losts.GetFileLostedPackage();
+    if (!lose.empty()) {
+      //重发
+      for (auto i : lose) {
+        std::cout << "重发 package_num " << i << std::endl;
+        SendFileDataAtPackNum(con, file_uptr, i);
       }
+    }
   }
- }
-#ifdef DEBUG
-  std::cout << "发送文件结束" << std::endl;
-#endif
   listen.join();
   return true;
 }
@@ -122,6 +121,7 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
  */
 void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) {
   //char buf[kBufSize];
+  auto time_pre = std::chrono::system_clock::now();
   Proto proto;
   while (losts.isRunning()) {
     int re = con.Recv(proto.buf(), BUFSIZ, 1000);
@@ -129,12 +129,19 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
       //FileSendControl::Type cmd = *(FileSendControl::Type*)buf;
       //if (cmd == FileSendControl::kReSend) {
       if (Proto::kReSend == proto.type()) {
+        time_pre = std::chrono::system_clock::now();
         //int package_num = *(int*)(buf+sizeof(FileSendControl::Type));
         //std::cout << "recived  package_num resend request " << package_num << std::endl;
         //losts.AddFileLostedRecord(package_num);
    //     std::cout << "sender :  request " << proto.package_numbuer() << std::endl;
         losts.AddFileLostedRecord(proto.package_numbuer());
       }
+      if (Proto::kAlive == proto.type()) {
+        time_pre = std::chrono::system_clock::now();
+      }
+    }
+    if (time_pre + std::chrono::seconds(2) >= std::chrono::system_clock::now()) {
+      losts.ExecRunning();
     }
   }
 }
@@ -142,7 +149,7 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
 
 LostPackageVec::LostPackageVec (int package_count) : 
   package_count_(package_count),
-  lost_(package_count_+1), running(true) {
+  lost_(package_count_+1), running_(true) {
 }
 
 LostPackageVec::~LostPackageVec () { }
@@ -174,12 +181,13 @@ void LostPackageVec::AddFileLostedRecord(int package_num) {
  * 否则返回false
  */
 bool LostPackageVec::ExitListen() {
+  if (!isRunning()) return true;
   std::unique_lock<std::mutex> lock(lock_);
   auto t = std::chrono::system_clock::now();
   t += std::chrono::seconds(5);
   std::cout << "sleepping..." << std::endl;
   if (cond_.wait_until(lock, t) == std::cv_status::timeout) {
-      running = false;
+      running_ = false;
       return true;
   }
   return false;
@@ -187,5 +195,5 @@ bool LostPackageVec::ExitListen() {
 
 bool LostPackageVec::isRunning() {
   std::lock_guard<std::mutex> lock(lock_);
-  return  running;
+  return  running_;
 }

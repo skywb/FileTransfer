@@ -41,12 +41,17 @@ public:
   bool ExitListen();
   //检查是否正在运行
   bool isRunning();
+  void ExecRunning() {
+    std::lock_guard<std::mutex> lock(lock_);
+    running_ = false;
+  }
+
 private:
   int package_count_;    //包数量
   std::vector<bool> lost_;  //丢失记录
   std::mutex lock_;
   std::condition_variable cond_;   //唤醒正在发送端重发数据包
-  bool running;
+  bool running_;
 };
 
 //发送文件, 参数分别为可用的组播地址和端口， 以及一个文件

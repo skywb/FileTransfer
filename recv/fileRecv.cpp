@@ -40,20 +40,34 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   Connecter con(group_ip, port);
   //char buf[kBufSize]; //接收缓冲区
   int recv_len = 0;  //接收的长度
+  //上次更新心跳包的时间
+  auto time_pre = std::chrono::system_clock::now();
   //检查的包序号
   int recv_max_pack_num = 1, check_package_num = 1;
   Proto proto;
   for (int i = 0; ; ++i) {
     recv_len = con.Recv(proto.buf(), kBufSize, 500);
     //模拟丢包
-    //if (Abandon(30)) {
-    //    std::cout << "主动丢包" << std::endl;
-    //    continue;
-    //}
+    if (Abandon(30)) {
+        std::cout << "主动丢包" << std::endl;
+        continue;
+    }
     if (recv_len > 0) {  //数据到来
-      //buf[recv_len] = 0;
-      //int pack_num = *(int*)(buf+kPackNumberBeg);
-      //proto.Analysis();
+      Proto::Type type;
+      type = proto.type();
+      if (type == Proto::kAlive || type == Proto::kReSend) {
+        time_pre = std::chrono::system_clock::now();
+        continue;
+      } else if (type != Proto::kData) {
+        std::cout << "非法type value is " << type  << std::endl;
+        continue;
+      }
+      if (time_pre + std::chrono::milliseconds(500) <= std::chrono::system_clock::now()) {
+        //超过500毫秒没有心跳包， 发送一次心跳包
+        Proto alive;
+        alive.set_type(Proto::kAlive);
+        con.Send(alive.buf(), alive.get_send_len());
+      }
       int pack_num = proto.package_numbuer();
       if (pack_num == 0) {
         continue;

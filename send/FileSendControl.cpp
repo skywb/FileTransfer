@@ -132,9 +132,7 @@ void FileSendControl::SendFile(std::string file_path) {
   { std::lock_guard<std::mutex> lock(mutex_);
     while(ip_used_[ip_local-kMulticastIpMin] && ip_local <= kMulticastIpMax) ++ip_local;
     if (ip_local >= kMulticastIpMax) {
-#if DEBUG
       std::cout << "文件过多" << std::endl;
-#endif
       /* TODO: 文件发送过快时将任务加入队列 <12-08-19, 王彬> */
       return ;
     }
@@ -158,33 +156,20 @@ void FileSendControl::SendFile(std::string file_path) {
   file_name = file->File_name();
   int file_len = file->File_len();
   Proto proto;
-  //*(FileSendControl::Type*)(buf+FileSendControl::kTypeBeg) = FileSendControl::kNewFile;
   proto.set_type(Proto::kNewFile);
-  //*(uint32_t*)(buf+FileSendControl::kGroupIPBeg) = ip_local;
   proto.set_group_ip(ip_local);
-  //*(int*)(buf+FileSendControl::kPortBeg) = port;
   proto.set_port(port);
-  //*(int*)(buf+FileSendControl::kFileLenBeg) = file_len;
   proto.set_file_len(file_len);
-  //*(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg) = file->UUID();
   proto.set_uuid(file->UUID());
-  //*(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)(file_name.size());
-  //strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
   proto.set_file_name(file_name);
-  //设置正在发送文件的信息
-  //file_notice->len_ = FileSendControl::kFileNameBeg+file_name.size();
-  //proto.buf(Proto::kNewFile, file_notice->buf_, file_notice->len_);
   memcpy(file_notice->buf_, proto.buf(), proto.get_send_len());
   file_notice->len_ = proto.get_send_len();
   file_notice->uuid_ = proto.uuid();
-  std::cout << "filenoto " <<  (*(Type*)(file_notice->buf_) == Proto::kNewFile) << std::endl;
   { std::lock_guard<std::mutex> lock(mutex_);
     file_is_sending_.push_back(std::move(file_notice));
   }
   //发送之前主动通知一次, 用于使接收端第一时间可以加入发送的组播地址，
   //避免前面几个数据包需要重传
-  std::cout << "new file ip is " << proto.group_ip() << std::endl;
-
   SendNoticeToClient();
   //启动文件发送的线程，开始发送文件
   std::thread th(FileSendCallback, ip_local, port, std::move(file));
@@ -209,7 +194,10 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
       break;
     }
   }
-  ctl->NoticeFront(file->UUID(), Type::kSendend);
+  if (file->Stat() == File::kSendend)
+    ctl->NoticeFront(file->UUID(), FileSendControl::kSendend);
+  else 
+    ctl->NoticeFront(file->UUID(), FileSendControl::kClientExec);
   //删除产生的临时压缩文件
   std::string cmd = "rm -f ";
   cmd += file->File_name();
@@ -262,8 +250,11 @@ void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, 
   in_addr ip_net;
   memcpy(&ip_net, &ip_net_u, 4);
   std::string ip(inet_ntoa(ip_net));
-  std::cout << "发送文件 ： ip is " << ip << " port : " << port_local << std::endl;
-  FileSend(ip, port_local, file);
+  bool stat = FileSend(ip, port_local, file);
+  if (stat) 
+    file->set_Stat(File::kSendend);
+  else 
+    file->set_Stat(File::kClientExec);
   auto ctl = FileSendControl::GetInstances();
   ctl->Sendend(std::move(file), group_ip_local);
 }

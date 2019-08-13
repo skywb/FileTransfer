@@ -13,6 +13,11 @@ class File
 public:
   static const int kFileDataMaxLength = 1000;
   static const int kFileNameMaxLen = 100;
+  enum Stat {
+    kSendend = 1,
+    kClientExec = 2,
+    kNetError = 3
+  };
 public:
   File (std::string file_path, boost::uuids::uuid uuid, int size=0, bool newFile = false);
   virtual ~File ();
@@ -24,6 +29,8 @@ public:
   bool Writeable();           //判断文件是否可写
   int Read(int pack_num, char* buf);       //根据包号计算位置，读固定长度的内容
   void Write(int pack_num, const char* data, int len);   //根据包号计算位置，写固定长度的内容
+  void set_Stat(Stat stat) { stat_ = stat; }
+  Stat Stat() { return stat_; }
   /*文件校验， 返回缺失的包
    *返回为空表示没有包丢失
    */
@@ -37,6 +44,7 @@ private:
   int filefd_;    //文件描述符
   int file_len_;   //文件长度
   std::vector<bool> pack_is_recved_;   //数据包已经到达状态的标记
+  enum Stat stat_;
 };
 
 #endif /* end of include guard: FILE_H_WTYE42R3 */
