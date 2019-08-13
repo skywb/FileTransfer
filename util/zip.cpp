@@ -100,6 +100,9 @@ std::string Unzip(const std::string& filePath, const std::string& savePath)
 	int err = 0;
 	struct zip *pZip;
 	pZip = zip_open(filePath.c_str(), 0, &err);
+    if (!pZip) {
+        std::cerr << zip_strerror(pZip) << std::endl;
+    }
 	int fileCount;
   std::string start_path = savePath;
   if (start_path[start_path.size() - 1] != '/')

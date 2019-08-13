@@ -38,25 +38,30 @@
  */
 bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) {
   Connecter con(group_ip, port);
-  char buf[kBufSize]; //接收缓冲区
+  //char buf[kBufSize]; //接收缓冲区
   int recv_len = 0;  //接收的长度
   //检查的包序号
   int recv_max_pack_num = 1, check_package_num = 1;
+  Proto proto;
   for (int i = 0; ; ++i) {
-    recv_len = con.Recv(buf, kBufSize, 500);
+    recv_len = con.Recv(proto.buf(), kBufSize, 500);
     //模拟丢包
     //if (Abandon(30)) {
     //    std::cout << "主动丢包" << std::endl;
     //    continue;
     //}
     if (recv_len > 0) {  //数据到来
-      Proto proto(buf, recv_len);
       //buf[recv_len] = 0;
       //int pack_num = *(int*)(buf+kPackNumberBeg);
+      proto.Analysis();
       int pack_num = proto.package_numbuer();
+      std::cout << "pack_num " << pack_num << std::endl;
       if (pack_num == 0) {
         continue;
       }
+      std::cout << proto.file_name() << std::endl;
+      //std::cout << proto.file_data() << std::endl;
+      std::cout << proto.file_data_len() << std::endl;
       recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
       //int file_name_len = *(int*)(buf+kFileNameLenBeg);
       //char file_name[File::kFileNameMaxLen+10];
@@ -65,7 +70,8 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       //TODO:校验文件名
       //int data_len = *(int*)(buf+kFileDataLenBeg);
       //file_uptr->Write(pack_num, buf+kFileDataBeg, data_len);
-      file_uptr->Write(pack_num, proto.file_data().c_str(), proto.file_data_len());
+      int data_len = proto.file_data_len();
+      file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
       /*: 检查之前的包是否到达 <22-07-19, 王彬> */
       while (check_package_num <= file_uptr->File_max_packages()
           && file_uptr->Check_at_package_number(check_package_num)) {
@@ -78,10 +84,10 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
                 Proto request;
                 request.set_type(Proto::kReSend);
                 request.set_package_number(check_package_num);
-                int len = 0;
-                request.buf(Proto::kReSend, buf, len);
+                //request.buf(Proto::kReSend, request.buf(), len);
                 //int len = RequestResendSetbuf(check_package_num, buf);
-                con.Send(buf, len);
+                std::cout << "request " << request.package_numbuer() << std::endl;
+                con.Send(request.buf(), request.get_send_len());
               }
           }
       }
@@ -91,10 +97,10 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
                 Proto request;
                 request.set_type(Proto::kReSend);
                 request.set_package_number(check_package_num);
-                int len = 0;
-                request.buf(Proto::kReSend, buf, len);
+                //request.buf(Proto::kReSend, request.buf(), len);
                 //int len = RequestResendSetbuf(check_package_num, buf);
-                con.Send(buf, len);
+                std::cout << "request " << request.package_numbuer() << std::endl;
+                con.Send(request.buf(), request.get_send_len());
             }
         }
     }
@@ -112,9 +118,10 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
                 Proto request;
                 request.set_type(Proto::kReSend);
                 request.set_package_number(check_package_num);
-                int len = 0;
-                request.buf(Proto::kReSend, buf, len);
-                con.Send(buf, len);
+                //int len = 0;
+                //request.buf(Proto::kReSend, request.buf(), len);
+                std::cout << "request " << request.package_numbuer() << std::endl;
+                con.Send(request.buf(), request.get_send_len());
               }
           }
       }

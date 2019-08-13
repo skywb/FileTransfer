@@ -2,6 +2,7 @@
 #include "fileSend.h"
 #include "recv/fileRecv.h"
 #include "util/zip.h"
+#include "File.h"
 
 #include <utility>
 #include <sys/epoll.h>
@@ -19,21 +20,61 @@ Proto::Proto (const char *buf, const int len) {
     case kAlive:
       break;
     case kReSend:
-      package_num_ = *(int*)(buf_+sizeof(Type)); 
+      package_num_ = *(int*)(buf+kPackNumberBeg);
       break;
     case kNewFile: 
-      group_ip_ = *(uint32_t*)(buf_+kGroupIPBeg);
-      port_ = *(int*)(buf_+kPortBeg);
-      file_len_ = *(int*)(buf_+kFileLenBeg);
-      uuid_ = *(boost::uuids::uuid*)(buf_+kFileUUIDBeg);
-      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
+      group_ip_ = *(uint32_t*)(buf+kGroupIPBeg);
+      port_ = *(int*)(buf+kPortBeg);
+      file_len_ = *(int*)(buf+kFileLenBeg);
+      uuid_ = *(boost::uuids::uuid*)(buf+kFileUUIDBeg);
+      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf+kFileNameLenBeg));
       break;
     case kData:
-      package_num_ = *(int*)(buf_+kPackNumberBeg);
-      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
-      file_data_ = std::string(buf+kFileDataBeg, *(int*)(buf_+kFileDataLenBeg));
+      package_num_ = *(int*)(buf+kPackNumberBeg);
+      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf+kFileNameLenBeg));
+      file_data_len_ = *(int*)(buf+kFileDataLenBeg);
+      //memcpy(file_data_, buf+kFileDataBeg, file_data_len_);
+      //strncpy(file_data_, buf+kFileDataBeg, file_data_len_);
       break;
   }
+}
+const int Proto::get_send_len() const {
+    Type type = *(Type*)(buf_ + kTypeBeg);
+    switch (type) {
+      case kAlive:
+        return sizeof(Type);
+      case kReSend:
+        return kPackNumberBeg + sizeof(int);
+      case kNewFile:
+        return kFileNameBeg + *(int*)(buf_+kFileNameLenBeg);
+      case kData:
+        return kFileDataBeg + file_data_len();
+    }
+    return 0;
+}
+bool Proto::Analysis() {
+    type_ = *(Type*)(buf_ + kTypeBeg);
+    switch (type_) {
+      case kAlive:
+        break;
+      case kReSend:
+        package_num_ = *(int*)(buf_+kPackNumberBeg);
+        break;
+      case kNewFile:
+        group_ip_ = *(uint32_t*)(buf_+kGroupIPBeg);
+        port_ = *(int*)(buf_+kPortBeg);
+        file_len_ = *(int*)(buf_+kFileLenBeg);
+        uuid_ = *(boost::uuids::uuid*)(buf_+kFileUUIDBeg);
+        file_name_ = std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
+        break;
+      case kData:
+        package_num_ = *(int*)(buf_+kPackNumberBeg);
+        file_name_ = std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
+        file_data_len_ = *(int*)(buf_+kFileDataLenBeg);
+        //strncpy(file_data_, buf+kFileDataBeg, file_data_len_);
+        break;
+    }
+    return true;
 }
 ////发送文件信息
 //Proto::Proto (Type type, uint32_t group_ip_local, int port,
@@ -46,39 +87,40 @@ Proto::Proto (const char *buf, const int len) {
 //    std::string file_name, std::string file_data)  {
 //}
 
-const int Proto::buf(Type type, char* buf, int& len) {
-  if (type != type_) return -1;
-  buf_ = buf;
-  *(Type*)(buf_+kTypeBeg) = type_;
-  len = -1;
-  switch (type_) {
-    case kAlive:
-      len = sizeof(Type);
-      break;
-    case kReSend:
-      *(int*)(buf_+sizeof(Type)) = package_num_;
-      len = kTypeBeg + sizeof(int);
-      break;
-    case kNewFile: 
-      *(uint32_t*)(buf_+kGroupIPBeg) = group_ip_;
-      *(int*)(buf_+kPortBeg) = port_;
-      *(int*)(buf_+kFileLenBeg) = file_len_;
-      *(boost::uuids::uuid*)(buf_+kFileUUIDBeg) = uuid_;
-      *(int*)(buf_+kFileNameLenBeg) = (int)(file_name_.length());
-      strncpy(buf_+kFileNameBeg, file_name_.c_str(), File::kFileNameMaxLen);
-      len = kFileNameBeg + std::min((int)file_name_.size(), File::kFileNameMaxLen);
-      break;
-    case kData:
-      *(int*)(buf_+kPackNumberBeg) = package_num_;
-      *(int*)(buf_+kFileNameLenBeg) = (int)file_name_.size();
-      strncpy(buf_+kFileNameBeg, file_name_.c_str(), File::kFileNameMaxLen);
-      *(int*)(buf_+kFileDataLenBeg) = file_data_.length();
-      strncpy(buf_+kFileDataBeg, file_data_.c_str(), file_data_.length());
-      len = file_data_.length() + kFileDataBeg;
-      break;
-  }
-  return  len;
-}
+//const int Proto::buf(Type type, char* buf, int& len) {
+//  if (type != type_) return -1;
+//  //buf_ = buf;
+//  *(Type*)(buf_+kTypeBeg) = type_;
+//  len = -1;
+//  switch (type_) {
+//    case kAlive:
+//      len = sizeof(Type);
+//      break;
+//    case kReSend:
+//      *(int*)(buf_+ kPackNumberBeg) = package_num_;
+//      len = kPackNumberBeg + sizeof(int);
+//      break;
+//    case kNewFile:
+//      *(uint32_t*)(buf_+kGroupIPBeg) = group_ip_;
+//      *(int*)(buf_+kPortBeg) = port_;
+//      *(int*)(buf_+kFileLenBeg) = file_len_;
+//      *(boost::uuids::uuid*)(buf_+kFileUUIDBeg) = uuid_;
+//      *(int*)(buf_+kFileNameLenBeg) = (int)(file_name_.length());
+//      strncpy(buf_+kFileNameBeg, file_name_.c_str(), File::kFileNameMaxLen);
+//      len = kFileNameBeg + std::min((int)file_name_.size(), 100);
+//      break;
+//    case kData:
+//      *(int*)(buf_+kPackNumberBeg) = package_num_;
+//      *(int*)(buf_+kFileNameLenBeg) = (int)file_name_.length();
+//      strncpy(buf_+kFileNameBeg, file_name_.c_str(), File::kFileNameMaxLen);
+//      *(int*)(buf_+kFileDataLenBeg) = file_data_len_;
+//      //memcpy(file_data_, buf+kFileDataBeg, file_data_len_);
+//      //strncpy(buf_+kFileDataBeg, file_data_, file_data_len_);
+//      len = file_data_len_ + kFileDataBeg;
+//      break;
+//  }
+//  return  len;
+//}
 
 
 FileSendControl::FileSendControl (std::string group_ip, int port) :
@@ -153,7 +195,7 @@ void FileSendControl::SendFile(std::string file_path) {
   file_name = file->File_name();
   //获取到的文件名带.zip, 去掉该后缀名
   msg.push_back(file_name.substr(0, file_name.find_last_of('.')));
-  NoticeFront(file_uuid, FileSendControl::kNewFile, msg);
+  NoticeFront(file_uuid, FileSendControl::kNewSendFile, msg);
   int port = ip_local - kMulticastIpMin;
   if (port % 2) {
     port += 10000;
@@ -179,13 +221,18 @@ void FileSendControl::SendFile(std::string file_path) {
   proto.set_file_name(file_name);
   //设置正在发送文件的信息
   //file_notice->len_ = FileSendControl::kFileNameBeg+file_name.size();
-  proto.buf(Proto::kNewFile, file_notice->buf_, file_notice->len_);
+  //proto.buf(Proto::kNewFile, file_notice->buf_, file_notice->len_);
+  memcpy(file_notice->buf_, proto.buf(), proto.get_send_len());
+  file_notice->len_ = proto.get_send_len();
   file_notice->uuid_ = proto.uuid();
+  std::cout << "filenoto " <<  (*(Type*)(file_notice->buf_) == Proto::kNewFile) << std::endl;
   { std::lock_guard<std::mutex> lock(mutex_);
     file_is_sending_.push_back(std::move(file_notice));
   }
   //发送之前主动通知一次, 用于使接收端第一时间可以加入发送的组播地址，
   //避免前面几个数据包需要重传
+  std::cout << "new file ip is " << proto.group_ip() << std::endl;
+
   SendNoticeToClient();
   //启动文件发送的线程，开始发送文件
   std::thread th(FileSendCallback, ip_local, port, std::move(file));
@@ -285,18 +332,17 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
 void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   char buf[kBufSize];
   boost::uuids::uuid file_uuid;
+  Proto proto;
   while (true) {
     memset(buf, 0, kBufSize);
     //3秒中超时等待， 如果没有数据什么也不做
     //可设置为-1 阻塞等待， 为了留下退出运行的接口,设为可超时
-    int cnt = con.Recv(buf, kBufSize, 3000);
+    int cnt = con.Recv(proto.buf(), BUFSIZ, 3000);
     if (cnt == -1) {
       continue;
     } else {
       /*: 解析组播地址和文件名 <24-07-19, 王彬> */
-      std::cout << "Recv " << cnt << " 字节" << std::endl;
-      Proto proto(buf, cnt);
-      //FileSendControl::Type type = (FileSendControl::Type)*(buf+kTypeBeg);
+      //std::cout << "Recv " << cnt << " 字节" << std::endl;
       Proto::Type type = proto.type();
       if (type != Proto::kNewFile) {
         std::cout << "type != kNewFile" << std::endl;
@@ -315,6 +361,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       //char file_name[File::kFileNameMaxLen];
       //strncpy(file_name, buf+FileSendControl::kFileNameBeg, File::kFileNameMaxLen);
       //file_name[filename_len] = 0;
+
       std::string file_name = proto.file_name();
       /*: 判断是否已经传输 <30-07-19, 王彬> */
       auto conse = FileSendControl::GetInstances();
@@ -339,6 +386,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       ctl->AddRecvingFile(std::move(file_notice));
       //转地址
       uint32_t ip_net = htonl(ip_local);
+      std::cout << "new file group ip is" << ip_local << std::endl;
       in_addr ip_addr;
       memcpy(&ip_addr, &ip_net, sizeof(in_addr));
       std::string ip(inet_ntoa(ip_addr));
@@ -355,6 +403,8 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
 void FileSendControl::SendNoticeToClient() {
   std::lock_guard<std::mutex> lock(mutex_);
   for (auto& i : file_is_sending_) {
+    //std::cout << "notice client " << *(Type*)(i->buf_) << std::endl;
+    //std::cout << i->len_ << std::endl;
     con.Send(i->buf_, i->len_);
   }
   for (auto it = file_is_recving_.begin(); it != file_is_recving_.end(); ++it) {

@@ -8,6 +8,7 @@
 #include <thread>
 #include <functional>
 #include <mutex>
+#include <cstring>
 #include <boost/uuid/uuid.hpp>
 
 
@@ -23,14 +24,13 @@ public:
   };
 private:
   static const int kTypeBeg = 0;
-  static const int kGroupIPBeg = kTypeBeg + sizeof(Type);
+  static const int kPackNumberBeg = kTypeBeg + sizeof(Type);
+  static const int kGroupIPBeg = kPackNumberBeg + sizeof(int);
   static const int kPortBeg = kGroupIPBeg + sizeof(uint32_t);
   static const int kFileLenBeg = kPortBeg + sizeof(int);
   static const int kFileUUIDBeg = kFileLenBeg + sizeof(int);
   static const int kFileNameLenBeg = kFileUUIDBeg + sizeof(boost::uuids::uuid);
   static const int kFileNameBeg = kFileNameLenBeg + sizeof(int);
-
-  static const int kPackNumberBeg = kTypeBeg + sizeof(Type);
   static const int kFileDataLenBeg = kFileNameBeg + File::kFileNameMaxLen;
   static const int kFileDataBeg = kFileDataLenBeg  + sizeof(int);
 public:
@@ -45,27 +45,30 @@ public:
   ////文件数据包
   //Proto (Type type, int package_num,
   //        std::string file_name, std::string file_data);
-
-  void set_type(Type type) { type_ = type; }
-  void set_group_ip(uint32_t group_ip) { group_ip_ = group_ip; }
-  void set_port(int port) { port_ = port; }
-  void set_file_len(int len) { file_len_ = len; }
-  void set_uuid(boost::uuids::uuid uuid) { uuid_ = uuid; }
-  void set_file_name(std::string filename) { file_name_ = filename; }
-  void set_package_number(int package_num) { package_num_ = package_num; }
-  void set_file_data(std::string data) { file_data_ = data; }
-
-  const Type type() const { return type_; }
-  const uint32_t group_ip() const { return  group_ip_; }
-  const int port() const { return port_; }
-  const boost::uuids::uuid& uuid() const { return uuid_; }
-  const int file_len() const { return file_len_; }
-  const std::string& file_name() const  { return file_name_; }
-  const int package_numbuer() const  { return package_num_; }
-  const int file_data_len() const { return file_data_.size(); }
-  const std::string& file_data() const  { return file_data_; }
-  const int buf(Type type, char* buf, int& len);
-  virtual ~Proto ();
+  bool Analysis();
+  void set_type(Type type) { *(Type*)(buf_+kTypeBeg) = type; }
+  void set_group_ip(uint32_t group_ip) { *(uint32_t*)(buf_+kGroupIPBeg) = group_ip; }
+  void set_port(int port) { *(int*)(buf_+kPortBeg) = port; }
+  void set_file_len(int len) { *(int*)(buf_+kFileLenBeg) = len; }
+  void set_uuid(boost::uuids::uuid uuid) { *(boost::uuids::uuid*)(buf_+kFileUUIDBeg) = uuid; }
+  void set_file_name(std::string filename) { strncpy(buf_+kFileNameBeg, filename.c_str(), 100); *(int*)(buf_+kFileNameLenBeg) = filename.length();}
+  void set_package_number(int package_num) { *(int*)(buf_+kPackNumberBeg) = package_num; }
+  void set_file_data_len(int len) { *(int*)(buf_+kFileDataLenBeg) = len; }
+  //void set_file_data(const char* data) { memcpy(buf_+kFileDataBeg, data, file_data_len_); }
+  char* get_file_data_buf_ptr() { return buf_+kFileDataBeg;}
+  const Type type() const { return *(Type*)(buf_+kTypeBeg); }
+  const uint32_t group_ip() const { return  *(uint32_t*)(buf_+kGroupIPBeg); }
+  const int port() const { return *(int*)(buf_+kPortBeg); }
+  const boost::uuids::uuid& uuid() const { return *(boost::uuids::uuid*)(buf_+kFileUUIDBeg); }
+  const int file_len() const { return *(int*)(buf_+kFileLenBeg); }
+  const std::string file_name() const  { return std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg)); }
+  const int package_numbuer() const  { return *(int*)(buf_+kPackNumberBeg); }
+  const int file_data_len() const { return *(int*)(buf_+kFileDataLenBeg); }
+  const int get_send_len() const;
+  //const char* file_data() const  { return buf_+kFileDataBeg; }
+  //const int buf(Type type, char* buf, int& len);
+  char* buf() {return buf_;}
+  virtual ~Proto () {}
 private:
   Type type_;
   uint32_t group_ip_;
@@ -74,8 +77,9 @@ private:
   boost::uuids::uuid uuid_;
   std::string file_name_;
   int package_num_;
-  std::string file_data_;
-  char* buf_;
+  int file_data_len_;
+  //char file_data_[File::kFileDataMaxLength+10];
+  char buf_[BUFSIZ];
 };
 
 
@@ -113,6 +117,7 @@ public:
     kNewFile = 1,    //接收的新的文件
     kRecvend = 2,    // 接收完毕
     kSendend = 3,    // 发送完毕
+    kNewSendFile = 4
   };
 
   static const uint32_t kMulticastIpMin = 3758096897; //224.0.0.10

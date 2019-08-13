@@ -68,8 +68,8 @@ void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
   //*(int*)(buf+kFileLenBeg) = file->File_len();
   proto.set_file_len(file->File_len());
   int len = 0;
-  proto.buf(Proto::kNewFile, buf, len);
-  con.Send(buf, len);
+  //proto.buf(Proto::kNewFile, buf, len);
+  con.Send(proto.buf(), proto.get_send_len());
 }
 
 /*
@@ -81,7 +81,7 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
   if (package_numbuer == 0) {
     SendFileMessage(con, file); 
   } else if (package_numbuer > 0) {
-    char buf[kBufSize];
+    //char buf[kBufSize];
     Proto proto;
     proto.set_type(Proto::kData);
     //*(int*)(buf+kPackNumberBeg) = package_numbuer;
@@ -89,7 +89,7 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
     //*(int*)(buf+kFileNameLenBeg) = file->File_name().size();
     //strncpy(buf+kFileNameBeg, file->File_name().c_str(), File::kFileNameMaxLen);
     proto.set_file_name(file->File_name());
-    int re = file->Read(package_numbuer, buf);
+    int re = file->Read(package_numbuer, proto.get_file_data_buf_ptr());
     if (re < 0) {
       //read error
       std::cout << "read len < 0" << __FILE__ << __LINE__ << std::endl;
@@ -98,12 +98,18 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
     //*(int*)(buf+kFileDataLenBeg) = re;
     //int len = re+kFileDataBeg;
     //buf[kFileDataBeg+re] = 0;
-    proto.set_file_data(std::string(buf, re));
+    proto.set_file_data_len(re);
+    //proto.set_file_data(buf);
     //std::cout << buf+kFileDataBeg << std::endl;
     int len = 0;
-    proto.buf(Proto::kData, buf, len);
-    if (-1 == con.Send(buf, len)) {
+    //proto.buf(Proto::kData, buf, len);
+    std::cout << "send pack " << proto.package_numbuer() << std::endl;
+    std::cout << proto.file_name() << std::endl;
+    //std::cout << proto.file_data() << std::endl;
+    if (-1 == con.Send(proto.buf(), proto.get_send_len())) {
         std::cout << "send error " << package_numbuer << std::endl;
+    } else {
+        std::cout << "send " << len << std::endl;
     }
   } else {
     std::cout << "package_num < 0" << std::endl;
@@ -126,10 +132,11 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
         //int package_num = *(int*)(buf+sizeof(FileSendControl::Type));
         //std::cout << "recived  package_num resend request " << package_num << std::endl;
         //losts.AddFileLostedRecord(package_num);
+        std::cout << "sender :  request " << proto.package_numbuer() << std::endl;
         losts.AddFileLostedRecord(proto.package_numbuer());
       }
     }
-	}
+  }
 }
 
 

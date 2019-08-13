@@ -54,6 +54,7 @@ int Connecter::Recv(char* buf, int len, int timeout) {
             if (re == -1) {
                 perror("error in Recv");
             }
+
             if (not_Listen_ip_[addr.sin_addr.s_addr]) continue;
             return re;
         } else {
