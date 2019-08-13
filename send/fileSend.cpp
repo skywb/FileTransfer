@@ -55,14 +55,21 @@ bool FileSend(std::string group_ip,
 //数据包格式： 包号（4Bytes)文件名长度(4Bytes)文件名(小于100Bytes)
 void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
   //发送文件信息
+  Proto proto;
+  proto.set_type(Proto::kNewFile);
   char buf[kBufSize];
-  *(int*)(buf+kPackNumberBeg) = (int)0;
-  *(buf+kFileNameLenBeg) = file->File_name().size();
-  char file_name[100];
-  strcpy(file_name, file->File_name().c_str());
-  ::strncpy(buf+kFileNameBeg, file_name, File::kFileNameMaxLen);
-  *(int*)(buf+kFileLenBeg) = file->File_len();
-  con.Send(buf, kFileLenBeg+sizeof(kFileDataLenBeg));
+  //*(int*)(buf+kPackNumberBeg) = (int)0;
+  proto.set_package_number(0);
+  //*(buf+kFileNameLenBeg) = file->File_name().size();
+  proto.set_file_name(file->File_name());
+  //char file_name[100];
+  //strcpy(file_name, file->File_name().c_str());
+  //::strncpy(buf+kFileNameBeg, file_name, File::kFileNameMaxLen);
+  //*(int*)(buf+kFileLenBeg) = file->File_len();
+  proto.set_file_len(file->File_len());
+  int len = 0;
+  proto.buf(Proto::kNewFile, buf, len);
+  con.Send(buf, len);
 }
 
 /*
@@ -75,19 +82,26 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
     SendFileMessage(con, file); 
   } else if (package_numbuer > 0) {
     char buf[kBufSize];
-    *(int*)(buf+kPackNumberBeg) = package_numbuer;
-    *(int*)(buf+kFileNameLenBeg) = file->File_name().size();
-    strncpy(buf+kFileNameBeg, file->File_name().c_str(), File::kFileNameMaxLen);
-    int re = file->Read(package_numbuer, buf+kFileDataBeg);
+    Proto proto;
+    proto.set_type(Proto::kData);
+    //*(int*)(buf+kPackNumberBeg) = package_numbuer;
+    proto.set_package_number(package_numbuer);
+    //*(int*)(buf+kFileNameLenBeg) = file->File_name().size();
+    //strncpy(buf+kFileNameBeg, file->File_name().c_str(), File::kFileNameMaxLen);
+    proto.set_file_name(file->File_name());
+    int re = file->Read(package_numbuer, buf);
     if (re < 0) {
       //read error
       std::cout << "read len < 0" << __FILE__ << __LINE__ << std::endl;
     }
     //std::cout << "file Read re is " << re << std::endl;
-    *(int*)(buf+kFileDataLenBeg) = re;
-    int len = re+kFileDataBeg;
-    buf[kFileDataBeg+re] = 0;
+    //*(int*)(buf+kFileDataLenBeg) = re;
+    //int len = re+kFileDataBeg;
+    //buf[kFileDataBeg+re] = 0;
+    proto.set_file_data(std::string(buf, re));
     //std::cout << buf+kFileDataBeg << std::endl;
+    int len = 0;
+    proto.buf(Proto::kData, buf, len);
     if (-1 == con.Send(buf, len)) {
         std::cout << "send error " << package_numbuer << std::endl;
     }
@@ -105,11 +119,14 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
   while (losts.isRunning()) {
     int re = con.Recv(buf, kBufSize, 1000);
     if (re > 0) {
-      FileSendControl::Type cmd = *(FileSendControl::Type*)buf;
-      if (cmd == FileSendControl::kReSend) {
-        int package_num = *(int*)(buf+sizeof(FileSendControl::Type));
+      Proto proto(buf, re);
+      //FileSendControl::Type cmd = *(FileSendControl::Type*)buf;
+      //if (cmd == FileSendControl::kReSend) {
+      if (Proto::kReSend == proto.type()) {
+        //int package_num = *(int*)(buf+sizeof(FileSendControl::Type));
         //std::cout << "recived  package_num resend request " << package_num << std::endl;
-        losts.AddFileLostedRecord(package_num);
+        //losts.AddFileLostedRecord(package_num);
+        losts.AddFileLostedRecord(proto.package_numbuer());
       }
     }
 	}

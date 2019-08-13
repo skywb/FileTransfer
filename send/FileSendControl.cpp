@@ -1,17 +1,91 @@
 #include "FileSendControl.h"
+#include "fileSend.h"
+#include "recv/fileRecv.h"
 #include "util/zip.h"
+
 #include <utility>
 #include <sys/epoll.h>
 #include <iomanip>
 #include <thread>
 #include <arpa/inet.h>
 #include <boost/uuid/uuid_generators.hpp>
+#include <algorithm>
+
+
+//读取消息内容
+Proto::Proto (const char *buf, const int len) {
+  type_ = *(Type*)(buf + kTypeBeg);
+  switch (type_) {
+    case kAlive:
+      break;
+    case kReSend:
+      package_num_ = *(int*)(buf_+sizeof(Type)); 
+      break;
+    case kNewFile: 
+      group_ip_ = *(uint32_t*)(buf_+kGroupIPBeg);
+      port_ = *(int*)(buf_+kPortBeg);
+      file_len_ = *(int*)(buf_+kFileLenBeg);
+      uuid_ = *(boost::uuids::uuid*)(buf_+kFileUUIDBeg);
+      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
+      break;
+    case kData:
+      package_num_ = *(int*)(buf_+kPackNumberBeg);
+      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
+      file_data_ = std::string(buf+kFileDataBeg, *(int*)(buf_+kFileDataLenBeg));
+      break;
+  }
+}
+////发送文件信息
+//Proto::Proto (Type type, uint32_t group_ip_local, int port,
+//    int file_len, boost::uuids::uuid uuid,
+//    std::string file_name) {
+//
+//}
+////文件数据包
+//Proto::Proto (Type type, int package_num,
+//    std::string file_name, std::string file_data)  {
+//}
+
+const int Proto::buf(Type type, char* buf, int& len) {
+  if (type != type_) return -1;
+  buf_ = buf;
+  *(Type*)(buf_+kTypeBeg) = type_;
+  len = -1;
+  switch (type_) {
+    case kAlive:
+      len = sizeof(Type);
+      break;
+    case kReSend:
+      *(int*)(buf_+sizeof(Type)) = package_num_;
+      len = kTypeBeg + sizeof(int);
+      break;
+    case kNewFile: 
+      *(uint32_t*)(buf_+kGroupIPBeg) = group_ip_;
+      *(int*)(buf_+kPortBeg) = port_;
+      *(int*)(buf_+kFileLenBeg) = file_len_;
+      *(boost::uuids::uuid*)(buf_+kFileUUIDBeg) = uuid_;
+      *(int*)(buf_+kFileNameLenBeg) = (int)(file_name_.length());
+      strncpy(buf_+kFileNameBeg, file_name_.c_str(), File::kFileNameMaxLen);
+      len = kFileNameBeg + std::min((int)file_name_.size(), File::kFileNameMaxLen);
+      break;
+    case kData:
+      *(int*)(buf_+kPackNumberBeg) = package_num_;
+      *(int*)(buf_+kFileNameLenBeg) = (int)file_name_.size();
+      strncpy(buf_+kFileNameBeg, file_name_.c_str(), File::kFileNameMaxLen);
+      *(int*)(buf_+kFileDataLenBeg) = file_data_.length();
+      strncpy(buf_+kFileDataBeg, file_data_.c_str(), file_data_.length());
+      len = file_data_.length() + kFileDataBeg;
+      break;
+  }
+  return  len;
+}
 
 
 FileSendControl::FileSendControl (std::string group_ip, int port) :
                                   group_ip_(group_ip), port_(port),
                                   ip_used_(1000, false), running_(false),
                                   con(group_ip, port) {
+  //*(FileSendControl::Type*)alive_msg_ = FileSendControl::kAlive;
   auto ip_net = inet_addr(group_ip_.c_str()); 
   auto ip_local = ntohl(ip_net);
   if (ip_local < kMulticastIpMin || ip_local > kMulticastIpMax) {
@@ -58,7 +132,7 @@ void FileSendControl::SendFile(std::string file_path) {
   auto file_uuid = boost::uuids::random_generator()();
   auto file = std::make_unique<File>(file_name, file_uuid);
   auto file_notice = std::make_unique<FileNotce>();
-  char *const buf = file_notice->buf_;
+  //char *const buf = file_notice->buf_;
   //找到一个可用的ip
   uint32_t ip_local = kMulticastIpMin;
   { std::lock_guard<std::mutex> lock(mutex_);
@@ -79,7 +153,7 @@ void FileSendControl::SendFile(std::string file_path) {
   file_name = file->File_name();
   //获取到的文件名带.zip, 去掉该后缀名
   msg.push_back(file_name.substr(0, file_name.find_last_of('.')));
-  NoticeFront(file_uuid, kNewSendFile, msg);
+  NoticeFront(file_uuid, FileSendControl::kNewFile, msg);
   int port = ip_local - kMulticastIpMin;
   if (port % 2) {
     port += 10000;
@@ -89,16 +163,24 @@ void FileSendControl::SendFile(std::string file_path) {
   //将要发送的数据按照协议格式写入缓冲区中
   file_name = file->File_name();
   int file_len = file->File_len();
-  *(FileSendControl::Type*)(buf+FileSendControl::kTypeBeg) = FileSendControl::kNewFile;
-  *(uint32_t*)(buf+FileSendControl::kGroupIPBeg) = ip_local;
-  *(int*)(buf+FileSendControl::kPortBeg) = port;
-  *(int*)(buf+FileSendControl::kFileLenBeg) = file_len;
-  *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg) = file->UUID();
-  *(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)(file_name.size());
-  strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
+  Proto proto;
+  //*(FileSendControl::Type*)(buf+FileSendControl::kTypeBeg) = FileSendControl::kNewFile;
+  proto.set_type(Proto::kNewFile);
+  //*(uint32_t*)(buf+FileSendControl::kGroupIPBeg) = ip_local;
+  proto.set_group_ip(ip_local);
+  //*(int*)(buf+FileSendControl::kPortBeg) = port;
+  proto.set_port(port);
+  //*(int*)(buf+FileSendControl::kFileLenBeg) = file_len;
+  proto.set_file_len(file_len);
+  //*(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg) = file->UUID();
+  proto.set_uuid(file->UUID());
+  //*(int*)(buf+FileSendControl::kFileNameLenBeg) = (int)(file_name.size());
+  //strncpy(buf+FileSendControl::kFileNameBeg, file_name.c_str(), File::kFileNameMaxLen);
+  proto.set_file_name(file_name);
   //设置正在发送文件的信息
-  file_notice->len_ = FileSendControl::kFileNameBeg+file_name.size();
-  file_notice->uuid_ = file->UUID();
+  //file_notice->len_ = FileSendControl::kFileNameBeg+file_name.size();
+  proto.buf(Proto::kNewFile, file_notice->buf_, file_notice->len_);
+  file_notice->uuid_ = proto.uuid();
   { std::lock_guard<std::mutex> lock(mutex_);
     file_is_sending_.push_back(std::move(file_notice));
   }
@@ -146,7 +228,7 @@ void FileSendControl::Recvend(std::unique_ptr<File> file) {
   system(cmd.c_str());
   if (file) {
     auto ctl = FileSendControl::GetInstances();
-    ctl->NoticeFront(file->UUID(), Type::kRecvend);
+    ctl->NoticeFront(file->UUID(), FileSendControl::kRecvend);
   } else {
     std::cout << "file_uptr 不可用" << std::endl;
   }
@@ -213,19 +295,27 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
     } else {
       /*: 解析组播地址和文件名 <24-07-19, 王彬> */
       std::cout << "Recv " << cnt << " 字节" << std::endl;
-      FileSendControl::Type type = (FileSendControl::Type)*(buf+kTypeBeg);
-      if (type != FileSendControl::kNewFile) {
+      Proto proto(buf, cnt);
+      //FileSendControl::Type type = (FileSendControl::Type)*(buf+kTypeBeg);
+      Proto::Type type = proto.type();
+      if (type != Proto::kNewFile) {
         std::cout << "type != kNewFile" << std::endl;
       }
       //按照协议格式读取数据
-      uint32_t ip_local = *(uint32_t*)(buf+kGroupIPBeg);
-      int port_recv = *(int*)(buf+kPortBeg);
-      int filename_len = *(int*)(buf+FileSendControl::kFileNameLenBeg);
-      file_uuid = *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg);
-      int file_len = *(int*)(buf+FileSendControl::kFileLenBeg);
-      char file_name[File::kFileNameMaxLen];
-      strncpy(file_name, buf+FileSendControl::kFileNameBeg, File::kFileNameMaxLen);
-      file_name[filename_len] = 0;
+      //uint32_t ip_local = *(uint32_t*)(buf+kGroupIPBeg);
+      uint32_t ip_local = proto.group_ip();
+      //int port_recv = *(int*)(buf+kPortBeg);
+      int port_recv = proto.port();
+      //int filename_len = *(int*)(buf+FileSendControl::kFileNameLenBeg);
+      //int filename_len = *(int*)(buf+FileSendControl::kFileNameLenBeg);
+      //file_uuid = *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg);
+      file_uuid = proto.uuid();
+      //int file_len = *(int*)(buf+FileSendControl::kFileLenBeg);
+      int file_len = proto.file_len();
+      //char file_name[File::kFileNameMaxLen];
+      //strncpy(file_name, buf+FileSendControl::kFileNameBeg, File::kFileNameMaxLen);
+      //file_name[filename_len] = 0;
+      std::string file_name = proto.file_name();
       /*: 判断是否已经传输 <30-07-19, 王彬> */
       auto conse = FileSendControl::GetInstances();
       if (conse->FileIsRecving(file_uuid)) {   //文件已经接收
@@ -238,7 +328,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       auto ctl = FileSendControl::GetInstances();
       std::vector<std::string> msg;
       msg.push_back(file_name_front);
-      ctl->NoticeFront(file_uuid, Type::kNewFile, msg);
+      ctl->NoticeFront(file_uuid, FileSendControl::kNewFile, msg);
       auto file = std::make_unique<File> (file_name, file_uuid, file_len, true);
       //保存文件信息
       auto file_notice = std::make_unique<FileNotce>();

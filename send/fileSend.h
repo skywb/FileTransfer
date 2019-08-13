@@ -2,6 +2,7 @@
 #define FILESEND_H_HMY0LJA6
 
 #include "File.h"
+#include "send/FileSendControl.h"
 #include "util/Connecter.h"
 
 #include <unistd.h>
@@ -11,18 +12,18 @@
 #include <mutex>
 #include <condition_variable>
 
-const int kPackNumberBeg  = 0;
-const int kFileNameLenBeg = kPackNumberBeg+sizeof(int);
-const int kFileNameBeg    = kFileNameLenBeg+sizeof(int);
-
-//文件长度   ----   0号包
-const int kFileLenBeg    = kFileNameBeg+File::kFileNameMaxLen;
-// 非0号包
-const int kFileDataLenBeg    = kFileNameBeg+File::kFileNameMaxLen;
-const int kFileDataBeg    = kFileDataLenBeg+sizeof(int);
-
-const int kBufSize = kFileDataBeg+File::kFileDataMaxLength+10;
+//const int kPackNumberBeg  = 0;
+//const int kFileNameLenBeg = kPackNumberBeg+sizeof(int);
+//const int kFileNameBeg    = kFileNameLenBeg+sizeof(int);
+//
+////文件长度   ----   0号包
+//const int kFileLenBeg    = kFileNameBeg+File::kFileNameMaxLen;
+//// 非0号包
+//const int kFileDataLenBeg    = kFileNameBeg+File::kFileNameMaxLen;
+//const int kFileDataBeg    = kFileDataLenBeg+sizeof(int);
+//
 const int kTTL = 64;
+//const int kBufSize = Proto::kPackHadeMaxLen+File::kFileDataMaxLength+10;
 
 //文件丢包记录， 用于保存所有丢失的包
 class LostPackageVec {

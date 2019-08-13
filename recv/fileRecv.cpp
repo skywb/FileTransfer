@@ -21,12 +21,12 @@
  * buf为缓冲区，该方法只提供写入缓冲，不提供发送功能
  * 将要发送的信息写入缓冲中
  */
-static int RequestResendSetbuf(int package_num, char* buf) {
-    std::cout << "request " << package_num << std::endl;
-    *(FileSendControl::Type*)buf = FileSendControl::Type::kReSend;
-    *(int*)(buf+sizeof(FileSendControl::Type)) = package_num;
-    return sizeof (FileSendControl::Type) + sizeof (package_num);
-}
+//static int RequestResendSetbuf(int package_num, char* buf) {
+//    std::cout << "request " << package_num << std::endl;
+//    *(FileSendControl::Type*)buf = FileSendControl::Type::kReSend;
+//    *(int*)(buf+sizeof(FileSendControl::Type)) = package_num;
+//    return sizeof (FileSendControl::Type) + sizeof (package_num);
+//}
 
 /* 加入指定的组播地址和端口， 接收一个文件，file_uptr必须为已经打开的状态
  * 创建一个连接到该组播地址的Connecter
@@ -50,19 +50,22 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
     //    continue;
     //}
     if (recv_len > 0) {  //数据到来
-      buf[recv_len] = 0;
-      int pack_num = *(int*)(buf+kPackNumberBeg);
+      Proto proto(buf, recv_len);
+      //buf[recv_len] = 0;
+      //int pack_num = *(int*)(buf+kPackNumberBeg);
+      int pack_num = proto.package_numbuer();
       if (pack_num == 0) {
         continue;
       }
       recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
-      int file_name_len = *(int*)(buf+kFileNameLenBeg);
-      char file_name[File::kFileNameMaxLen+10];
+      //int file_name_len = *(int*)(buf+kFileNameLenBeg);
+      //char file_name[File::kFileNameMaxLen+10];
       /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
-      strncpy(file_name, buf+kFileNameBeg, file_name_len);
+      //strncpy(file_name, buf+kFileNameBeg, file_name_len);
       //TODO:校验文件名
-      int data_len = *(int*)(buf+kFileDataLenBeg);
-      file_uptr->Write(pack_num, buf+kFileDataBeg, data_len);
+      //int data_len = *(int*)(buf+kFileDataLenBeg);
+      //file_uptr->Write(pack_num, buf+kFileDataBeg, data_len);
+      file_uptr->Write(pack_num, proto.file_data().c_str(), proto.file_data_len());
       /*: 检查之前的包是否到达 <22-07-19, 王彬> */
       while (check_package_num <= file_uptr->File_max_packages()
           && file_uptr->Check_at_package_number(check_package_num)) {
@@ -72,15 +75,25 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
           recv_max_pack_num = std::min(recv_max_pack_num, file_uptr->File_max_packages());
           for (int i=check_package_num; i<= recv_max_pack_num; ++i) {
               if (!file_uptr->Check_at_package_number(check_package_num)) {
-                  int len = RequestResendSetbuf(check_package_num, buf);
-                  con.Send(buf, len);
+                Proto request;
+                request.set_type(Proto::kReSend);
+                request.set_package_number(check_package_num);
+                int len = 0;
+                request.buf(Proto::kReSend, buf, len);
+                //int len = RequestResendSetbuf(check_package_num, buf);
+                con.Send(buf, len);
               }
           }
       }
     } else {    //没有数据， 可能已经发送完成
         for (int i=check_package_num; i<= file_uptr->File_max_packages(); ++i) {
             if (!file_uptr->Check_at_package_number(check_package_num)) {
-                int len = RequestResendSetbuf(check_package_num, buf);
+                Proto request;
+                request.set_type(Proto::kReSend);
+                request.set_package_number(check_package_num);
+                int len = 0;
+                request.buf(Proto::kReSend, buf, len);
+                //int len = RequestResendSetbuf(check_package_num, buf);
                 con.Send(buf, len);
             }
         }
@@ -95,8 +108,13 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       } else {
           for (int i=check_package_num; i<= file_uptr->File_max_packages(); ++i) {
               if (!file_uptr->Check_at_package_number(check_package_num)) {
-                  int len = RequestResendSetbuf(check_package_num, buf);
-                  con.Send(buf, len);
+                //int len = RequestResendSetbuf(check_package_num, buf);
+                Proto request;
+                request.set_type(Proto::kReSend);
+                request.set_package_number(check_package_num);
+                int len = 0;
+                request.buf(Proto::kReSend, buf, len);
+                con.Send(buf, len);
               }
           }
       }
