@@ -53,15 +53,11 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
     if (recv_len > 0) {  //数据到来
       //buf[recv_len] = 0;
       //int pack_num = *(int*)(buf+kPackNumberBeg);
-      proto.Analysis();
+      //proto.Analysis();
       int pack_num = proto.package_numbuer();
-      std::cout << "pack_num " << pack_num << std::endl;
       if (pack_num == 0) {
         continue;
       }
-      std::cout << proto.file_name() << std::endl;
-      //std::cout << proto.file_data() << std::endl;
-      std::cout << proto.file_data_len() << std::endl;
       recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
       //int file_name_len = *(int*)(buf+kFileNameLenBeg);
       //char file_name[File::kFileNameMaxLen+10];
@@ -84,8 +80,6 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
                 Proto request;
                 request.set_type(Proto::kReSend);
                 request.set_package_number(check_package_num);
-                //request.buf(Proto::kReSend, request.buf(), len);
-                //int len = RequestResendSetbuf(check_package_num, buf);
                 std::cout << "request " << request.package_numbuer() << std::endl;
                 con.Send(request.buf(), request.get_send_len());
               }
@@ -97,9 +91,6 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
                 Proto request;
                 request.set_type(Proto::kReSend);
                 request.set_package_number(check_package_num);
-                //request.buf(Proto::kReSend, request.buf(), len);
-                //int len = RequestResendSetbuf(check_package_num, buf);
-                std::cout << "request " << request.package_numbuer() << std::endl;
                 con.Send(request.buf(), request.get_send_len());
             }
         }
@@ -118,9 +109,6 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
                 Proto request;
                 request.set_type(Proto::kReSend);
                 request.set_package_number(check_package_num);
-                //int len = 0;
-                //request.buf(Proto::kReSend, request.buf(), len);
-                std::cout << "request " << request.package_numbuer() << std::endl;
                 con.Send(request.buf(), request.get_send_len());
               }
           }

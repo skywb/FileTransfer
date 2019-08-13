@@ -121,18 +121,18 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
  * 线程任务
  */
 void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) {
-  char buf[kBufSize];
+  //char buf[kBufSize];
+  Proto proto;
   while (losts.isRunning()) {
-    int re = con.Recv(buf, kBufSize, 1000);
+    int re = con.Recv(proto.buf(), BUFSIZ, 1000);
     if (re > 0) {
-      Proto proto(buf, re);
       //FileSendControl::Type cmd = *(FileSendControl::Type*)buf;
       //if (cmd == FileSendControl::kReSend) {
       if (Proto::kReSend == proto.type()) {
         //int package_num = *(int*)(buf+sizeof(FileSendControl::Type));
         //std::cout << "recived  package_num resend request " << package_num << std::endl;
         //losts.AddFileLostedRecord(package_num);
-        std::cout << "sender :  request " << proto.package_numbuer() << std::endl;
+   //     std::cout << "sender :  request " << proto.package_numbuer() << std::endl;
         losts.AddFileLostedRecord(proto.package_numbuer());
       }
     }

@@ -36,16 +36,9 @@ private:
 public:
   static const int kPackHadeMaxLen = kFileDataLenBeg;
   //读取消息内容
-  Proto (const char *buf, const int len);
-  Proto () { type_ = kUnavailable; }
-  ////发送文件信息
-  //Proto (Type type, uint32_t group_ip_local, int port,
-  //        int file_len, boost::uuids::uuid uuid,
-  //        std::string file_name);
-  ////文件数据包
-  //Proto (Type type, int package_num,
-  //        std::string file_name, std::string file_data);
-  bool Analysis();
+  //Proto (const char *buf, const int len);
+  Proto () { memset(buf_, 0, BUFSIZ);}
+  //bool Analysis();
   void set_type(Type type) { *(Type*)(buf_+kTypeBeg) = type; }
   void set_group_ip(uint32_t group_ip) { *(uint32_t*)(buf_+kGroupIPBeg) = group_ip; }
   void set_port(int port) { *(int*)(buf_+kPortBeg) = port; }
@@ -65,19 +58,17 @@ public:
   const int package_numbuer() const  { return *(int*)(buf_+kPackNumberBeg); }
   const int file_data_len() const { return *(int*)(buf_+kFileDataLenBeg); }
   const int get_send_len() const;
-  //const char* file_data() const  { return buf_+kFileDataBeg; }
-  //const int buf(Type type, char* buf, int& len);
   char* buf() {return buf_;}
   virtual ~Proto () {}
 private:
-  Type type_;
-  uint32_t group_ip_;
-  int port_;
-  int file_len_;
-  boost::uuids::uuid uuid_;
-  std::string file_name_;
-  int package_num_;
-  int file_data_len_;
+  //Type type_;
+  //uint32_t group_ip_;
+  //int port_;
+  //int file_len_;
+  //boost::uuids::uuid uuid_;
+  //std::string file_name_;
+  //int package_num_;
+  //int file_data_len_;
   //char file_data_[File::kFileDataMaxLength+10];
   char buf_[BUFSIZ];
 };
@@ -105,14 +96,6 @@ struct FileNotce {
 class FileSendControl
 {
 public:
-  //enum Type {
-  //  kNewFile = 1,    //接收的新的文件
-  //  kAlive = 2,      // 心跳包， 保活
-  //  kReSend = 3,     // 重发请求
-  //  kSendend = 5,    // 发送完毕
-  //  kNewSendFile = 6, // 新发送一个文件
-  //  kData = 7         // 数据包
-  //};
   enum Type {
     kNewFile = 1,    //接收的新的文件
     kRecvend = 2,    // 接收完毕

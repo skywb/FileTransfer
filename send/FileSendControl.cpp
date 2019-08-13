@@ -14,30 +14,28 @@
 
 
 //读取消息内容
-Proto::Proto (const char *buf, const int len) {
-  type_ = *(Type*)(buf + kTypeBeg);
-  switch (type_) {
-    case kAlive:
-      break;
-    case kReSend:
-      package_num_ = *(int*)(buf+kPackNumberBeg);
-      break;
-    case kNewFile: 
-      group_ip_ = *(uint32_t*)(buf+kGroupIPBeg);
-      port_ = *(int*)(buf+kPortBeg);
-      file_len_ = *(int*)(buf+kFileLenBeg);
-      uuid_ = *(boost::uuids::uuid*)(buf+kFileUUIDBeg);
-      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf+kFileNameLenBeg));
-      break;
-    case kData:
-      package_num_ = *(int*)(buf+kPackNumberBeg);
-      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf+kFileNameLenBeg));
-      file_data_len_ = *(int*)(buf+kFileDataLenBeg);
-      //memcpy(file_data_, buf+kFileDataBeg, file_data_len_);
-      //strncpy(file_data_, buf+kFileDataBeg, file_data_len_);
-      break;
-  }
-}
+//Proto::Proto (const char *buf, const int len) {
+//  type_ = *(Type*)(buf + kTypeBeg);
+//  switch (type_) {
+//    case kAlive:
+//      break;
+//    case kReSend:
+//      package_num_ = *(int*)(buf+kPackNumberBeg);
+//      break;
+//    case kNewFile: 
+//      group_ip_ = *(uint32_t*)(buf+kGroupIPBeg);
+//      port_ = *(int*)(buf+kPortBeg);
+//      file_len_ = *(int*)(buf+kFileLenBeg);
+//      uuid_ = *(boost::uuids::uuid*)(buf+kFileUUIDBeg);
+//      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf+kFileNameLenBeg));
+//      break;
+//    case kData:
+//      package_num_ = *(int*)(buf+kPackNumberBeg);
+//      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf+kFileNameLenBeg));
+//      file_data_len_ = *(int*)(buf+kFileDataLenBeg);
+//      break;
+//  }
+//}
 const int Proto::get_send_len() const {
     Type type = *(Type*)(buf_ + kTypeBeg);
     switch (type) {
@@ -52,74 +50,28 @@ const int Proto::get_send_len() const {
     }
     return 0;
 }
-bool Proto::Analysis() {
-    type_ = *(Type*)(buf_ + kTypeBeg);
-    switch (type_) {
-      case kAlive:
-        break;
-      case kReSend:
-        package_num_ = *(int*)(buf_+kPackNumberBeg);
-        break;
-      case kNewFile:
-        group_ip_ = *(uint32_t*)(buf_+kGroupIPBeg);
-        port_ = *(int*)(buf_+kPortBeg);
-        file_len_ = *(int*)(buf_+kFileLenBeg);
-        uuid_ = *(boost::uuids::uuid*)(buf_+kFileUUIDBeg);
-        file_name_ = std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
-        break;
-      case kData:
-        package_num_ = *(int*)(buf_+kPackNumberBeg);
-        file_name_ = std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
-        file_data_len_ = *(int*)(buf_+kFileDataLenBeg);
-        //strncpy(file_data_, buf+kFileDataBeg, file_data_len_);
-        break;
-    }
-    return true;
-}
-////发送文件信息
-//Proto::Proto (Type type, uint32_t group_ip_local, int port,
-//    int file_len, boost::uuids::uuid uuid,
-//    std::string file_name) {
-//
-//}
-////文件数据包
-//Proto::Proto (Type type, int package_num,
-//    std::string file_name, std::string file_data)  {
-//}
-
-//const int Proto::buf(Type type, char* buf, int& len) {
-//  if (type != type_) return -1;
-//  //buf_ = buf;
-//  *(Type*)(buf_+kTypeBeg) = type_;
-//  len = -1;
-//  switch (type_) {
-//    case kAlive:
-//      len = sizeof(Type);
-//      break;
-//    case kReSend:
-//      *(int*)(buf_+ kPackNumberBeg) = package_num_;
-//      len = kPackNumberBeg + sizeof(int);
-//      break;
-//    case kNewFile:
-//      *(uint32_t*)(buf_+kGroupIPBeg) = group_ip_;
-//      *(int*)(buf_+kPortBeg) = port_;
-//      *(int*)(buf_+kFileLenBeg) = file_len_;
-//      *(boost::uuids::uuid*)(buf_+kFileUUIDBeg) = uuid_;
-//      *(int*)(buf_+kFileNameLenBeg) = (int)(file_name_.length());
-//      strncpy(buf_+kFileNameBeg, file_name_.c_str(), File::kFileNameMaxLen);
-//      len = kFileNameBeg + std::min((int)file_name_.size(), 100);
-//      break;
-//    case kData:
-//      *(int*)(buf_+kPackNumberBeg) = package_num_;
-//      *(int*)(buf_+kFileNameLenBeg) = (int)file_name_.length();
-//      strncpy(buf_+kFileNameBeg, file_name_.c_str(), File::kFileNameMaxLen);
-//      *(int*)(buf_+kFileDataLenBeg) = file_data_len_;
-//      //memcpy(file_data_, buf+kFileDataBeg, file_data_len_);
-//      //strncpy(buf_+kFileDataBeg, file_data_, file_data_len_);
-//      len = file_data_len_ + kFileDataBeg;
-//      break;
-//  }
-//  return  len;
+//bool Proto::Analysis() {
+//    type_ = *(Type*)(buf_ + kTypeBeg);
+//    switch (type_) {
+//      case kAlive:
+//        break;
+//      case kReSend:
+//        package_num_ = *(int*)(buf_+kPackNumberBeg);
+//        break;
+//      case kNewFile:
+//        group_ip_ = *(uint32_t*)(buf_+kGroupIPBeg);
+//        port_ = *(int*)(buf_+kPortBeg);
+//        file_len_ = *(int*)(buf_+kFileLenBeg);
+//        uuid_ = *(boost::uuids::uuid*)(buf_+kFileUUIDBeg);
+//        file_name_ = std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
+//        break;
+//      case kData:
+//        package_num_ = *(int*)(buf_+kPackNumberBeg);
+//        file_name_ = std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
+//        file_data_len_ = *(int*)(buf_+kFileDataLenBeg);
+//        break;
+//    }
+//    return true;
 //}
 
 
