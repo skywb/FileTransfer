@@ -120,6 +120,7 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
   while (losts.isRunning()) {
     int re = con.Recv(proto.buf(), BUFSIZ, 1000);
     if (re > 0) {
+      std::cout << "recv " << re << " Bytes" << std::endl;
       if (Proto::kReSend == proto.type()) {
         time_pre = std::chrono::system_clock::now();
         std::cout << "recved pack resend request " << proto.package_numbuer() << std::endl;

@@ -21,6 +21,7 @@ static void RequeseResendPackage(int package_num, Connecter& con) {
   Proto request;
   request.set_type(Proto::kReSend);
   request.set_package_number(package_num);
+  std::cout << "request " << package_num << std::endl;
   con.Send(request.buf(), request.get_send_len());
 }
 
