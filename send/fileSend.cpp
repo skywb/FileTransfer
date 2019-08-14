@@ -120,14 +120,9 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
   while (losts.isRunning()) {
     int re = con.Recv(proto.buf(), BUFSIZ, 1000);
     if (re > 0) {
-      //FileSendControl::Type cmd = *(FileSendControl::Type*)buf;
-      //if (cmd == FileSendControl::kReSend) {
       if (Proto::kReSend == proto.type()) {
         time_pre = std::chrono::system_clock::now();
-        //int package_num = *(int*)(buf+sizeof(FileSendControl::Type));
-        //std::cout << "recived  package_num resend request " << package_num << std::endl;
-        //losts.AddFileLostedRecord(package_num);
-   //     std::cout << "sender :  request " << proto.package_numbuer() << std::endl;
+        std::cout << "recved pack resend request " << proto.package_numbuer() << std::endl;
         losts.AddFileLostedRecord(proto.package_numbuer());
       }
       if (Proto::kAlive == proto.type()) {
@@ -135,6 +130,7 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
       }
     }
     if (time_pre + std::chrono::seconds(2) >= std::chrono::system_clock::now()) {
+      std::cout << "all client quit" << std::endl;
       losts.ExecRunning();
     }
   }

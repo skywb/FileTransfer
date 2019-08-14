@@ -71,6 +71,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       //数据包到来， 更新上次到来时间
       time_pack_pre = std::chrono::system_clock::now();
       recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
+      std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
       /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
       file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
       if(recv_max_pack_num - check_package_num > 5) { //请求重发
