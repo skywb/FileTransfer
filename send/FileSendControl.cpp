@@ -208,7 +208,8 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
 
 void FileSendControl::Recvend(std::unique_ptr<File> file) {
   std::lock_guard<std::mutex> lock(mutex_);
-  std::string file_name = Unzip(file->File_name(), "./");
+  if (file->Stat())
+    std::string file_name = Unzip(file->File_name(), "./");
   //删除已经存在的文件
   std::string cmd = "rm -f ";
   cmd += file->File_name();

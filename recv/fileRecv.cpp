@@ -40,52 +40,53 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   auto time_alive_pre = std::chrono::system_clock::now();
   auto time_pack_pre = std::chrono::system_clock::now();
   //检查的包序号
-  int recv_max_pack_num = 1, check_package_num = 1;
+  int request_pack_num = 1, check_package_num = 1, max_ack = 0;
   Proto proto;
-  int max_ack = 0;
-  for (int i = 0; ; ++i) {
+  //for (int i = 0; ; ++i) {
+  while (true) {
     recv_len = con.Recv(proto.buf(), kBufSize, 500);
-    if (recv_len > 0) {  //有数据到来
+    if (recv_len > 0) {  
+      //有数据到来
       Proto::Type type;
       type = proto.type();
       //非数据包
-      if (type == Proto::kAlive || type == Proto::kReSend) {
+      if (type == Proto::kAlive || type == Proto::kReSend) {/*{{{*/
         time_alive_pre = std::chrono::system_clock::now();
         //超时没有数据包到达， 可能发送端已经断开连接
         if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
           break;
         }
-        continue;
       } else if (type != Proto::kData) {
         std::cout << "非法type value is " << type  << std::endl;
         //超时没有数据包到达， 可能发送端已经断开连接
         if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
           break;
+        }/*}}}*/
+      } else { //数据包
+        int pack_num = proto.package_numbuer();
+        if (pack_num == 0) {
+          continue;
         }
-        continue;
-      }
-      //数据包
-      int pack_num = proto.package_numbuer();
-      if (pack_num == 0) {
-        continue;
-      }
-      //数据包到来， 更新上次到来时间
-      time_pack_pre = std::chrono::system_clock::now();
-      recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
-      max_ack = std::max(max_ack, proto.ack_package_number());
-      std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
-      /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
-      file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
-      if (proto.ack_package_number() == file_uptr->File_max_packages()) {
-        if (pack_num % 300 == 0) {
-          while (check_package_num <= file_uptr->File_max_packages()
-              && file_uptr->Check_at_package_number(check_package_num)) ++check_package_num;
-          for (int i = check_package_num, cnt = 0; i < pack_num + 300 && cnt < 300; ++i) {
-            if (!file_uptr->Check_at_package_number(i)) {
-              RequeseResendPackage(i, con);
-              ++cnt;
+        //数据包到来， 更新上次到来时间
+        time_pack_pre = std::chrono::system_clock::now();
+        //recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
+        max_ack = std::max(max_ack, proto.ack_package_number());
+        std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
+        /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
+        file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
+        while (check_package_num <= file_uptr->File_max_packages() 
+            && file_uptr->Check_at_package_number(check_package_num))
+          ++check_package_num;
+        request_pack_num = std::max(request_pack_num, check_package_num);
+        if (proto.ack_package_number() - request_pack_num > 300) {
+          if (request_pack_num > file_uptr->File_max_packages()) request_pack_num = check_package_num;
+          for (int i=0; request_pack_num < proto.ack_package_number() && i < 300; ) {
+            if (!file_uptr->Check_at_package_number(request_pack_num)) {
+              RequeseResendPackage(request_pack_num, con);
+              ++i;
               time_alive_pre = std::chrono::system_clock::now();
             }
+            ++request_pack_num;
           }
         }
       }
@@ -95,12 +96,14 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         break;
       }
       //发送请求
-      for (int i=check_package_num, cnt = 0; i<file_uptr->File_max_packages() && cnt < 300; ++i) {
-        if (!file_uptr->Check_at_package_number(i)) {
-          RequeseResendPackage(i, con);
+      if (request_pack_num > file_uptr->File_max_packages()) request_pack_num = check_package_num;
+      for (int i= 0; request_pack_num <= file_uptr->File_max_packages() && i < 300;) {
+        if (!file_uptr->Check_at_package_number(request_pack_num)) {
+          RequeseResendPackage(request_pack_num, con);
           time_alive_pre = std::chrono::system_clock::now();
-          ++cnt;
+          ++i;
         }
+        ++request_pack_num;
       }
     }
     while (check_package_num <= file_uptr->File_max_packages()
