@@ -81,10 +81,12 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         if (pack_num % 300 == 0) {
           while (check_package_num <= file_uptr->File_max_packages()
               && file_uptr->Check_at_package_number(check_package_num)) ++check_package_num;
-          for (int i = check_package_num; i < pack_num + 300; ++i) {
-            if (!file_uptr->Check_at_package_number(i)) 
+          for (int i = check_package_num, cnt = 0; i < pack_num + 300 && cnt < 300; ++i) {
+            if (!file_uptr->Check_at_package_number(i)) {
               RequeseResendPackage(i, con);
-            time_alive_pre = std::chrono::system_clock::now();
+              ++cnt;
+              time_alive_pre = std::chrono::system_clock::now();
+            }
           }
         }
       }
@@ -93,10 +95,12 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         std::cout << "发送端已断开连接" << std::endl;
         break;
       }
-      for (int i=check_package_num, cnt = 0; i<file_uptr->File_max_packages() && cnt < 100; ++i) {
-        RequeseResendPackage(i, con);
-        time_alive_pre = std::chrono::system_clock::now();
-        ++cnt;
+      for (int i=check_package_num, cnt = 0; i<file_uptr->File_max_packages() && cnt < 300; ++i) {
+        if (!file_uptr->Check_at_package_number(i)) {
+          RequeseResendPackage(i, con);
+          time_alive_pre = std::chrono::system_clock::now();
+          ++cnt;
+        }
       }
     }
     while (check_package_num <= file_uptr->File_max_packages()
