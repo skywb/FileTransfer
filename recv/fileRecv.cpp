@@ -38,7 +38,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   int recv_len = 0;  //接收的长度
   //上次更新心跳包的时间
   auto time_alive_pre = std::chrono::system_clock::now();
-  auto time_pack_pre = time_alive_pre;
+  auto time_pack_pre = std::chrono::system_clock::now();
   //检查的包序号
   int recv_max_pack_num = 1, check_package_num = 1;
   Proto proto;
@@ -72,6 +72,8 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       if (pack_num == 0) {
         continue;
       }
+      //数据包到来， 更新上次到来时间
+      time_pack_pre = std::chrono::system_clock::now();
       recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
       /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
       file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
