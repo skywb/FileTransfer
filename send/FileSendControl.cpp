@@ -321,7 +321,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       //通知前端
       std::string file_name_front(file_name);
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
-      file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
+      //file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
       auto ctl = FileSendControl::GetInstances();
       std::vector<std::string> msg;
       msg.push_back(file_name_front);

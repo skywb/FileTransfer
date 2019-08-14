@@ -77,6 +77,7 @@ int Connecter::Send(char* buf, int len) {
       std::cout << strerror(errno) << std::endl;
       return -1;
     } else {
+       std::cout << "send " << re << "Bytes" << std::endl;
       //std::cout << inet_ntoa(addr_.sin_addr) << " port " << htons(addr_.sin_port) << " 发送" << re << "字节" << std::endl;
     }
   }

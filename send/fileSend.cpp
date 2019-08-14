@@ -100,15 +100,9 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
     proto.set_file_data_len(re);
     //proto.set_file_data(buf);
     //std::cout << buf+kFileDataBeg << std::endl;
-    int len = 0;
-    //proto.buf(Proto::kData, buf, len);
     std::cout << "send pack " << proto.package_numbuer() << std::endl;
-    std::cout << proto.file_name() << std::endl;
-    //std::cout << proto.file_data() << std::endl;
     if (-1 == con.Send(proto.buf(), proto.get_send_len())) {
         std::cout << "send error " << package_numbuer << std::endl;
-    } else {
-        std::cout << "send " << len << std::endl;
     }
   } else {
     std::cout << "package_num < 0" << std::endl;
