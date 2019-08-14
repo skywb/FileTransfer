@@ -105,7 +105,8 @@ public:
     kRecvend = 2,    // 接收完毕
     kSendend = 3,    // 发送完毕
     kNewSendFile = 4,
-    kClientExec = 5
+    kClientExec = 5,
+    kNetError = 6
   };
 
   static const uint32_t kMulticastIpMin = 3758096897; //224.0.0.10

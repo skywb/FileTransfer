@@ -17,16 +17,12 @@
 #include <thread>
 
 
-/* 请求重发包号为package_num的数据包的 请求信息写入缓冲buf
- * buf为缓冲区，该方法只提供写入缓冲，不提供发送功能
- * 将要发送的信息写入缓冲中
- */
-//static int RequestResendSetbuf(int package_num, char* buf) {
-//    std::cout << "request " << package_num << std::endl;
-//    *(FileSendControl::Type*)buf = FileSendControl::Type::kReSend;
-//    *(int*)(buf+sizeof(FileSendControl::Type)) = package_num;
-//    return sizeof (FileSendControl::Type) + sizeof (package_num);
-//}
+static void RequeseResendPackage(int package_num, Connecter& con) {
+  Proto request;
+  request.set_type(Proto::kReSend);
+  request.set_package_number(package_num);
+  con.Send(request.buf(), request.get_send_len());
+}
 
 /* 加入指定的组播地址和端口， 接收一个文件，file_uptr必须为已经打开的状态
  * 创建一个连接到该组播地址的Connecter
@@ -41,94 +37,96 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   //char buf[kBufSize]; //接收缓冲区
   int recv_len = 0;  //接收的长度
   //上次更新心跳包的时间
-  auto time_pre = std::chrono::system_clock::now();
+  auto time_alive_pre = std::chrono::system_clock::now();
+  auto time_pack_pre = time_alive_pre;
   //检查的包序号
   int recv_max_pack_num = 1, check_package_num = 1;
   Proto proto;
   for (int i = 0; ; ++i) {
     recv_len = con.Recv(proto.buf(), kBufSize, 500);
-    //模拟丢包
-    if (Abandon(30)) {
-        std::cout << "主动丢包" << std::endl;
-        continue;
+    if (Abandon(30)) {    //模拟丢包
+      std::cout << "主动丢包" << std::endl;
+      continue;
     }
-    if (recv_len > 0) {  //数据到来
+    if (recv_len > 0) {  //有数据到来
       Proto::Type type;
       type = proto.type();
+      //非数据包
       if (type == Proto::kAlive || type == Proto::kReSend) {
-        time_pre = std::chrono::system_clock::now();
+        time_alive_pre = std::chrono::system_clock::now();
+        //超时没有数据包到达， 可能发送端已经断开连接
+        if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
+          break;
+        }
         continue;
       } else if (type != Proto::kData) {
         std::cout << "非法type value is " << type  << std::endl;
+        //超时没有数据包到达， 可能发送端已经断开连接
+        if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
+          break;
+        }
         continue;
       }
-      if (time_pre + std::chrono::milliseconds(500) <= std::chrono::system_clock::now()) {
-        //超过500毫秒没有心跳包， 发送一次心跳包
-        Proto alive;
-        alive.set_type(Proto::kAlive);
-        con.Send(alive.buf(), alive.get_send_len());
-      }
+      //数据包
       int pack_num = proto.package_numbuer();
       if (pack_num == 0) {
         continue;
       }
       recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
-      //int file_name_len = *(int*)(buf+kFileNameLenBeg);
-      //char file_name[File::kFileNameMaxLen+10];
       /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
-      //strncpy(file_name, buf+kFileNameBeg, file_name_len);
-      //TODO:校验文件名
-      //int data_len = *(int*)(buf+kFileDataLenBeg);
-      //file_uptr->Write(pack_num, buf+kFileDataBeg, data_len);
-      int data_len = proto.file_data_len();
       file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
-      /*: 检查之前的包是否到达 <22-07-19, 王彬> */
-      while (check_package_num <= file_uptr->File_max_packages()
-          && file_uptr->Check_at_package_number(check_package_num)) {
-        ++check_package_num;
-      }
       if(recv_max_pack_num - check_package_num > 5) { //请求重发
-          recv_max_pack_num = std::min(recv_max_pack_num, file_uptr->File_max_packages());
-          for (int i=check_package_num; i<= recv_max_pack_num; ++i) {
-              if (!file_uptr->Check_at_package_number(check_package_num)) {
-                Proto request;
-                request.set_type(Proto::kReSend);
-                request.set_package_number(check_package_num);
-                std::cout << "request " << request.package_numbuer() << std::endl;
-                con.Send(request.buf(), request.get_send_len());
-              }
+        recv_max_pack_num = std::min(recv_max_pack_num, file_uptr->File_max_packages());
+        for (int i=check_package_num; i<= recv_max_pack_num; ++i) {
+          if (!file_uptr->Check_at_package_number(check_package_num)) {
+            RequeseResendPackage(check_package_num, con);
+            time_alive_pre = std::chrono::system_clock::now();
           }
-      }
-    } else {    //没有数据， 可能已经发送完成
-        for (int i=check_package_num; i<= file_uptr->File_max_packages(); ++i) {
-            if (!file_uptr->Check_at_package_number(check_package_num)) {
-                Proto request;
-                request.set_type(Proto::kReSend);
-                request.set_package_number(check_package_num);
-                con.Send(request.buf(), request.get_send_len());
-            }
         }
+      }
+    } else {    //没有数据， 可能已经发送完成 
+      if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
+        std::cout << "发送端已断开连接" << std::endl;
+        break;
+      }
+      for (int i=check_package_num; i<= file_uptr->File_max_packages(); ++i) {
+        if (!file_uptr->Check_at_package_number(check_package_num)) {
+          RequeseResendPackage(check_package_num, con);
+          time_alive_pre = std::chrono::system_clock::now();
+        }
+      }
     }
     if (check_package_num > file_uptr->File_max_packages()) {   //数据可能已经全部到达， 检查是否已经全部到达
       check_package_num = 0;
-      while (check_package_num <= file_uptr->File_max_packages() && file_uptr->Check_at_package_number(check_package_num))
+      while (check_package_num <= file_uptr->File_max_packages() 
+          && file_uptr->Check_at_package_number(check_package_num))
         ++check_package_num;
       if (check_package_num > file_uptr->File_max_packages()) {
-          std::cout << "check end" << std::endl;
-          break;
+        std::cout << "check end" << std::endl;
+        break;
       } else {
-          for (int i=check_package_num; i<= file_uptr->File_max_packages(); ++i) {
-              if (!file_uptr->Check_at_package_number(check_package_num)) {
-                //int len = RequestResendSetbuf(check_package_num, buf);
-                Proto request;
-                request.set_type(Proto::kReSend);
-                request.set_package_number(check_package_num);
-                con.Send(request.buf(), request.get_send_len());
-              }
+        for (int i=check_package_num; i<= file_uptr->File_max_packages(); ++i) {
+          if (!file_uptr->Check_at_package_number(check_package_num)) {
+            RequeseResendPackage(check_package_num, con);
+            time_alive_pre = std::chrono::system_clock::now();
           }
+        }
       }
     }
+    //超过500毫秒没有心跳包， 发送一次心跳包
+    if (time_alive_pre + std::chrono::milliseconds(500) <= std::chrono::system_clock::now()) {
+      Proto alive;
+      alive.set_type(Proto::kAlive);
+      con.Send(alive.buf(), alive.get_send_len());
+      time_alive_pre = std::chrono::system_clock::now();
+    }
   }
-  return true;
+  //断开连接， 检查是否数据全部到达
+  check_package_num = 0;
+  while (check_package_num <= file_uptr->File_max_packages() 
+      && file_uptr->Check_at_package_number(check_package_num))
+    ++check_package_num;
+  return check_package_num > file_uptr->File_max_packages();
+  //return true;
 }
 

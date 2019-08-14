@@ -215,7 +215,10 @@ void FileSendControl::Recvend(std::unique_ptr<File> file) {
   system(cmd.c_str());
   if (file) {
     auto ctl = FileSendControl::GetInstances();
-    ctl->NoticeFront(file->UUID(), FileSendControl::kRecvend);
+    if (file->Stat() == File::kRecvend)
+      ctl->NoticeFront(file->UUID(), FileSendControl::kRecvend);
+    else 
+      ctl->NoticeFront(file->UUID(), FileSendControl::kNetError);
   } else {
     std::cout << "file_uptr 不可用" << std::endl;
   }
@@ -260,7 +263,12 @@ void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, 
 }
 
 void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr) {
-  FileRecv(group_ip, port, file_uptr);
+  bool stat = FileRecv(group_ip, port, file_uptr);
+  if (stat) {
+    file_uptr->set_Stat(File::kNetError);
+  } else {
+    file_uptr->set_Stat(File::kRecvend);
+  }
   auto ctl = GetInstances();
   ctl->Recvend(std::move(file_uptr));
 
@@ -285,7 +293,6 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       continue;
     } else {
       /*: 解析组播地址和文件名 <24-07-19, 王彬> */
-      //std::cout << "Recv " << cnt << " 字节" << std::endl;
       Proto::Type type = proto.type();
       if (type != Proto::kNewFile) {
         std::cout << "type != kNewFile" << std::endl;

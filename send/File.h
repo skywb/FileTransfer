@@ -16,7 +16,8 @@ public:
   enum Stat {
     kSendend = 1,
     kClientExec = 2,
-    kNetError = 3
+    kNetError = 3,
+    kRecvend = 4
   };
 public:
   File (std::string file_path, boost::uuids::uuid uuid, int size=0, bool newFile = false);
