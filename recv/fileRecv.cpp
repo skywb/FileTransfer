@@ -95,6 +95,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         std::cout << "发送端已断开连接" << std::endl;
         break;
       }
+      //发送请求
       for (int i=check_package_num, cnt = 0; i<file_uptr->File_max_packages() && cnt < 300; ++i) {
         if (!file_uptr->Check_at_package_number(i)) {
           RequeseResendPackage(i, con);
