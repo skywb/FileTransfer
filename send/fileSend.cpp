@@ -30,7 +30,10 @@ bool FileSend(std::string group_ip,
   //发送文件内容
   for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
     SendFileDataAtPackNum(con, file_uptr, i, i); 
-    if (i % 500 == 0) {
+    if (!losts.isRunning()) {
+      return false;
+    }
+    if (i % 300 == 0) {
       auto lose = losts.GetFileLostedPackage();
       if (!lose.empty()) {
         //重发
@@ -40,9 +43,6 @@ bool FileSend(std::string group_ip,
           SendFileDataAtPackNum(con, file_uptr, j, i);
         }
       }
-    }
-    if (!losts.isRunning()) {
-      return false;
     }
   }
   std::cout << "发送完毕, 开始校验" << std::endl;
@@ -122,7 +122,7 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
   while (losts.isRunning()) {
     int re = con.Recv(proto.buf(), BUFSIZ, 1000);
     if (re > 0) {
-      std::cout << "recv " << re << " Bytes  " << *(Proto::Type*)(proto.buf()) << std::endl;
+      //std::cout << "recv " << re << " Bytes  " << *(Proto::Type*)(proto.buf()) << std::endl;
       if (Proto::kReSend == proto.type()) {
         time_pre = std::chrono::system_clock::now();
         std::cout << "recved pack resend request " << proto.package_numbuer() << std::endl;
@@ -132,7 +132,7 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
         time_pre = std::chrono::system_clock::now();
       }
     }
-    if (time_pre + std::chrono::seconds(2) <= std::chrono::system_clock::now()) {
+    if (time_pre + std::chrono::seconds(5) <= std::chrono::system_clock::now()) {
       std::cout << "all client quit" << std::endl;
       losts.ExecRunning();
     }
