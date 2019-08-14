@@ -44,10 +44,6 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   Proto proto;
   for (int i = 0; ; ++i) {
     recv_len = con.Recv(proto.buf(), kBufSize, 500);
-    if (Abandon(30)) {    //模拟丢包
-      std::cout << "主动丢包" << std::endl;
-      continue;
-    }
     if (recv_len > 0) {  //有数据到来
       Proto::Type type;
       type = proto.type();
@@ -79,24 +75,23 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
       if(recv_max_pack_num - check_package_num > 5) { //请求重发
         recv_max_pack_num = std::min(recv_max_pack_num, file_uptr->File_max_packages());
-        for (int i=check_package_num; i<= recv_max_pack_num; ++i) {
+        for (int i=check_package_num, cnt = 0; i<= recv_max_pack_num && cnt < 5; ++i) {
           if (!file_uptr->Check_at_package_number(check_package_num)) {
             RequeseResendPackage(check_package_num, con);
+            ++cnt;
             time_alive_pre = std::chrono::system_clock::now();
           }
         }
+        //请求一个较大的数据包， 防止因为发送端已经发送完毕，造成每次都要等待请求
+        RequeseResendPackage(std::min(check_package_num+6, file_uptr->File_max_packages()), con);
       }
     } else {    //没有数据， 可能已经发送完成 
-      if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
+      if (time_pack_pre + std::chrono::seconds(5) <= std::chrono::system_clock::now()) {
         std::cout << "发送端已断开连接" << std::endl;
         break;
       }
-      for (int i=check_package_num; i<= file_uptr->File_max_packages(); ++i) {
-        if (!file_uptr->Check_at_package_number(check_package_num)) {
-          RequeseResendPackage(check_package_num, con);
-          time_alive_pre = std::chrono::system_clock::now();
-        }
-      }
+      //请求一个较大的数据包， 防止因为发送端已经发送完毕，造成每次都要等待请求
+      RequeseResendPackage(std::min(check_package_num+6, file_uptr->File_max_packages()), con);
     }
     if (check_package_num > file_uptr->File_max_packages()) {   //数据可能已经全部到达， 检查是否已经全部到达
       check_package_num = 0;
