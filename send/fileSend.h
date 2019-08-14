@@ -61,7 +61,7 @@ bool FileSend(std::string group_ip, int port, std::unique_ptr<File>& file_uptr);
 void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file);
 
 //发送包号为package_number的数据包
-void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer);
+void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer, int ack_num);
 
 //监听接收端丢失的包   --- 线程回调函数
 void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con);

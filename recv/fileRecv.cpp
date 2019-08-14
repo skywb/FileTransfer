@@ -43,6 +43,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   //检查的包序号
   int recv_max_pack_num = 1, check_package_num = 1;
   Proto proto;
+  int max_ack = 0;
   for (int i = 0; ; ++i) {
     recv_len = con.Recv(proto.buf(), kBufSize, 500);
     if (recv_len > 0) {  //有数据到来
@@ -72,28 +73,26 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       //数据包到来， 更新上次到来时间
       time_pack_pre = std::chrono::system_clock::now();
       recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
+      max_ack = std::max(max_ack, proto.ack_package_number());
       std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
       /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
       file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
-      if(recv_max_pack_num - check_package_num > 5) { //请求重发
-        recv_max_pack_num = std::min(recv_max_pack_num, file_uptr->File_max_packages());
-        for (int i=check_package_num, cnt = 0; i<= recv_max_pack_num && cnt < 5; ++i) {
-          if (!file_uptr->Check_at_package_number(i)) {
-            RequeseResendPackage(i, con);
-            ++cnt;
-            time_alive_pre = std::chrono::system_clock::now();
+      if (proto.ack_package_number() == file_uptr->File_max_packages()) {
+        if (pack_num % 300 == 0) {
+          while (check_package_num <= file_uptr->File_max_packages()
+              && file_uptr->Check_at_package_number(check_package_num)) ++check_package_num;
+          for (int i = check_package_num; i < pack_num + 300; ++i) {
+            if (!file_uptr->Check_at_package_number(i)) 
+              RequeseResendPackage(i, con);
           }
         }
-        //请求一个较大的数据包， 防止因为发送端已经发送完毕，造成每次都要等待请求
-        RequeseResendPackage(std::min(check_package_num+6, file_uptr->File_max_packages()), con);
       }
     } else {    //没有数据， 可能已经发送完成 
       if (time_pack_pre + std::chrono::seconds(5) <= std::chrono::system_clock::now()) {
         std::cout << "发送端已断开连接" << std::endl;
         break;
       }
-      //请求一个较大的数据包， 防止因为发送端已经发送完毕，造成每次都要等待请求
-      RequeseResendPackage(std::min(recv_max_pack_num+100, file_uptr->File_max_packages()), con);
+      RequeseResendPackage(std::min(check_package_num+100, file_uptr->File_max_packages()), con);
     }
     while (check_package_num <= file_uptr->File_max_packages()
         && file_uptr->Check_at_package_number(check_package_num))
