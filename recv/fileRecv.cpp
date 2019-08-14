@@ -87,7 +87,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         }
       }
     } else {    //没有数据， 可能已经发送完成 
-      if (time_pack_pre + std::chrono::seconds(20) <= std::chrono::system_clock::now()) {
+      if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
         std::cout << "发送端已断开连接" << std::endl;
         break;
       }
@@ -106,7 +106,6 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       while (check_package_num <= file_uptr->File_max_packages() 
           && file_uptr->Check_at_package_number(check_package_num))
         ++check_package_num;
-      std::cout << "check" << std::endl;
       if (check_package_num > file_uptr->File_max_packages()) {
         std::cout << "check end" << std::endl;
         break;
