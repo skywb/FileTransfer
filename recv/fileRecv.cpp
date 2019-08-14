@@ -93,6 +93,9 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       //请求一个较大的数据包， 防止因为发送端已经发送完毕，造成每次都要等待请求
       RequeseResendPackage(std::min(check_package_num+6, file_uptr->File_max_packages()), con);
     }
+    while (check_package_num <= file_uptr->File_max_packages()
+        && file_uptr->Check_at_package_number(check_package_num))
+      ++check_package_num;
     if (check_package_num > file_uptr->File_max_packages()) {   //数据可能已经全部到达， 检查是否已经全部到达
       check_package_num = 0;
       while (check_package_num <= file_uptr->File_max_packages() 
@@ -123,6 +126,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   while (check_package_num <= file_uptr->File_max_packages() 
       && file_uptr->Check_at_package_number(check_package_num))
     ++check_package_num;
+  std::cout << check_package_num << " " << file_uptr->File_max_packages() << std::endl;
   return check_package_num > file_uptr->File_max_packages();
   //return true;
 }

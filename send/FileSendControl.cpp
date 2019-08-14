@@ -265,9 +265,9 @@ void FileSendControl::FileSendCallback(uint32_t group_ip_local, int port_local, 
 void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<File> file_uptr) {
   bool stat = FileRecv(group_ip, port, file_uptr);
   if (stat) {
-    file_uptr->set_Stat(File::kNetError);
-  } else {
     file_uptr->set_Stat(File::kRecvend);
+  } else {
+    file_uptr->set_Stat(File::kNetError);
   }
   auto ctl = GetInstances();
   ctl->Recvend(std::move(file_uptr));
