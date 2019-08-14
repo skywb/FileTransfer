@@ -16,7 +16,6 @@
 #include <vector>
 #include <thread>
 
-
 static void RequeseResendPackage(int package_num, Connecter& con) {
   Proto request;
   request.set_type(Proto::kReSend);
