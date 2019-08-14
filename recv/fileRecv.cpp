@@ -78,8 +78,8 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       if(recv_max_pack_num - check_package_num > 5) { //请求重发
         recv_max_pack_num = std::min(recv_max_pack_num, file_uptr->File_max_packages());
         for (int i=check_package_num, cnt = 0; i<= recv_max_pack_num && cnt < 5; ++i) {
-          if (!file_uptr->Check_at_package_number(check_package_num)) {
-            RequeseResendPackage(check_package_num, con);
+          if (!file_uptr->Check_at_package_number(i)) {
+            RequeseResendPackage(i, con);
             ++cnt;
             time_alive_pre = std::chrono::system_clock::now();
           }
