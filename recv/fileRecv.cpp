@@ -93,7 +93,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         break;
       }
       //请求一个较大的数据包， 防止因为发送端已经发送完毕，造成每次都要等待请求
-      RequeseResendPackage(std::min(check_package_num+6, file_uptr->File_max_packages()), con);
+      RequeseResendPackage(std::min(recv_max_pack_num+100, file_uptr->File_max_packages()), con);
     }
     while (check_package_num <= file_uptr->File_max_packages()
         && file_uptr->Check_at_package_number(check_package_num))
