@@ -144,12 +144,12 @@ std::string Unzip(const std::string& filePath, const std::string& savePath)
 		zip_fread(pzipFile, buf, zipStat.size);
 		std::fstream fs;
     if (!start_path.empty()) {
-        if (start_path[start_path.length()-1] != '/') start_path += "/";
-      file_path = start_path +  zipStat.name;
+		if (start_path[start_path.length()-1] != '/') start_path += "/";
+		file_path = start_path +  zipStat.name;
     }
     else 
       file_path = zipStat.name;
-    std::cout << file_path << std::endl;
+	//std::cout << file_path << std::endl;
 		fs.open(file_path.c_str(), std::fstream::binary | std::fstream::out);
 		fs.write(buf,zipStat.size);
 		fs.close();
