@@ -24,7 +24,8 @@ public:
 private:
   static const int kTypeBeg = 0;
   static const int kPackNumberBeg = kTypeBeg + sizeof(Type);
-  static const int kGroupIPBeg = kPackNumberBeg + sizeof(int);
+  static const int kAckPackNumberBeg = kPackNumberBeg + sizeof(int);
+  static const int kGroupIPBeg = kAckPackNumberBeg + sizeof(int);
   static const int kPortBeg = kGroupIPBeg + sizeof(uint32_t);
   static const int kFileLenBeg = kPortBeg + sizeof(int);
   static const int kFileUUIDBeg = kFileLenBeg + sizeof(int);
@@ -47,6 +48,7 @@ public:
     strncpy(buf_+kFileNameBeg, filename.c_str(), 100);
     *(int*)(buf_+kFileNameLenBeg) = filename.length();
   }
+  void set_ack_package_number(int ack_num) { *(int*)(buf_+kAckPackNumberBeg) = ack_num; }
   void set_package_number(int package_num) { *(int*)(buf_+kPackNumberBeg) = package_num; }
   void set_file_data_len(int len) { *(int*)(buf_+kFileDataLenBeg) = len; }
   //void set_file_data(const char* data) { memcpy(buf_+kFileDataBeg, data, file_data_len_); }
@@ -60,20 +62,12 @@ public:
     return std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg)); 
   }
   const int package_numbuer() const  { return *(int*)(buf_+kPackNumberBeg); }
+  const int ack_package_number() {  return *(int*)(buf_+kAckPackNumberBeg); }
   const int file_data_len() const { return *(int*)(buf_+kFileDataLenBeg); }
   const int get_send_len() const;
   char* buf() {return buf_;}
   virtual ~Proto () {}
 private:
-  //Type type_;
-  //uint32_t group_ip_;
-  //int port_;
-  //int file_len_;
-  //boost::uuids::uuid uuid_;
-  //std::string file_name_;
-  //int package_num_;
-  //int file_data_len_;
-  //char file_data_[File::kFileDataMaxLength+10];
   char buf_[BUFSIZ];
 };
 

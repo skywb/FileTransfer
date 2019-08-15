@@ -29,20 +29,32 @@ bool FileSend(std::string group_ip,
   //设置多播地址
   //发送文件内容
   for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
-    SendFileDataAtPackNum(con, file_uptr, i); 
+    SendFileDataAtPackNum(con, file_uptr, i, i); 
     if (!losts.isRunning()) {
       return false;
+    }
+    if (i % 300 == 0) {
+      auto lose = losts.GetFileLostedPackage();
+      if (!lose.empty()) {
+        //重发
+        for (auto j : lose) {
+          std::cout << "重发 package_num " << i << std::endl;
+          if (j > i) break;
+          SendFileDataAtPackNum(con, file_uptr, j, i);
+        }
+      }
     }
   }
   std::cout << "发送完毕, 开始校验" << std::endl;
   //检查所有的丢包情况， 并重发
+  int end_pack = file_uptr->File_max_packages();
   while (!losts.ExitListen()) {
     auto lose = losts.GetFileLostedPackage();
     if (!lose.empty()) {
       //重发
       for (auto i : lose) {
         std::cout << "重发 package_num " << i << std::endl;
-        SendFileDataAtPackNum(con, file_uptr, i);
+        SendFileDataAtPackNum(con, file_uptr, i, end_pack);
       }
     }
   }
@@ -76,30 +88,20 @@ void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
  * 若为0号包， 则为文件信息
  * 若包号大于0， 则计算数据在文件的相应位置，并发送
  */
-void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer) {
+void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer, int ack_num) {
   if (package_numbuer == 0) {
     SendFileMessage(con, file); 
   } else if (package_numbuer > 0) {
-    //char buf[kBufSize];
     Proto proto;
     proto.set_type(Proto::kData);
-    //*(int*)(buf+kPackNumberBeg) = package_numbuer;
     proto.set_package_number(package_numbuer);
-    //*(int*)(buf+kFileNameLenBeg) = file->File_name().size();
-    //strncpy(buf+kFileNameBeg, file->File_name().c_str(), File::kFileNameMaxLen);
+    proto.set_ack_package_number(ack_num);
     proto.set_file_name(file->File_name());
     int re = file->Read(package_numbuer, proto.get_file_data_buf_ptr());
     if (re < 0) {
-      //read error
       std::cout << "read len < 0" << __FILE__ << __LINE__ << std::endl;
     }
-    //std::cout << "file Read re is " << re << std::endl;
-    //*(int*)(buf+kFileDataLenBeg) = re;
-    //int len = re+kFileDataBeg;
-    //buf[kFileDataBeg+re] = 0;
     proto.set_file_data_len(re);
-    //proto.set_file_data(buf);
-    //std::cout << buf+kFileDataBeg << std::endl;
     std::cout << "send pack " << proto.package_numbuer() << std::endl;
     if (-1 == con.Send(proto.buf(), proto.get_send_len())) {
         std::cout << "send error " << package_numbuer << std::endl;
@@ -120,7 +122,7 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
   while (losts.isRunning()) {
     int re = con.Recv(proto.buf(), BUFSIZ, 1000);
     if (re > 0) {
-      std::cout << "recv " << re << " Bytes  " << *(Proto::Type*)(proto.buf()) << std::endl;
+      //std::cout << "recv " << re << " Bytes  " << *(Proto::Type*)(proto.buf()) << std::endl;
       if (Proto::kReSend == proto.type()) {
         time_pre = std::chrono::system_clock::now();
         std::cout << "recved pack resend request " << proto.package_numbuer() << std::endl;
@@ -129,10 +131,11 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
       if (Proto::kAlive == proto.type()) {
         time_pre = std::chrono::system_clock::now();
       }
-    }
-    if (time_pre + std::chrono::seconds(2) <= std::chrono::system_clock::now()) {
-      std::cout << "all client quit" << std::endl;
-      losts.ExecRunning();
+    } else {
+      if (time_pre + std::chrono::seconds(5) <= std::chrono::system_clock::now()) {
+        std::cout << "all client quit" << std::endl;
+        losts.ExecRunning();
+      }
     }
   }
 }

@@ -77,6 +77,9 @@ std::string Zip(const std::string& filePath, const std::string& savePath) {
     return Zipdir(filePath, obj_path+zipfile_name);
   }
   int errorp;
+  /* TODO: 应该修改文件名保存， 不可直接删除， 可能其他线程正在占用 <15-08-19, 王彬> */
+  std::string cmd = "rm -f ";
+  cmd += obj_path + zipfile_name;
   zip_t *zipper = zip_open((obj_path + zipfile_name).c_str(), ZIP_CREATE | ZIP_EXCL, &errorp);
   if (zipper == nullptr) {
     zip_error_t ziperror;

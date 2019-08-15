@@ -16,7 +16,6 @@
 #include <vector>
 #include <thread>
 
-
 static void RequeseResendPackage(int package_num, Connecter& con) {
   Proto request;
   request.set_type(Proto::kReSend);
@@ -41,59 +40,71 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   auto time_alive_pre = std::chrono::system_clock::now();
   auto time_pack_pre = std::chrono::system_clock::now();
   //检查的包序号
-  int recv_max_pack_num = 1, check_package_num = 1;
+  int request_pack_num = 1, check_package_num = 1, max_ack = 0;
   Proto proto;
-  for (int i = 0; ; ++i) {
+  //for (int i = 0; ; ++i) {
+  while (true) {
     recv_len = con.Recv(proto.buf(), kBufSize, 500);
-    if (recv_len > 0) {  //有数据到来
+    if (recv_len > 0) {  
+      //有数据到来
       Proto::Type type;
       type = proto.type();
       //非数据包
-      if (type == Proto::kAlive || type == Proto::kReSend) {
+      if (type == Proto::kAlive || type == Proto::kReSend) {/*{{{*/
         time_alive_pre = std::chrono::system_clock::now();
         //超时没有数据包到达， 可能发送端已经断开连接
         if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
           break;
         }
-        continue;
       } else if (type != Proto::kData) {
         std::cout << "非法type value is " << type  << std::endl;
         //超时没有数据包到达， 可能发送端已经断开连接
         if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
           break;
+        }/*}}}*/
+      } else { //数据包
+        int pack_num = proto.package_numbuer();
+        if (pack_num == 0) {
+          continue;
         }
-        continue;
-      }
-      //数据包
-      int pack_num = proto.package_numbuer();
-      if (pack_num == 0) {
-        continue;
-      }
-      //数据包到来， 更新上次到来时间
-      time_pack_pre = std::chrono::system_clock::now();
-      recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
-      std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
-      /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
-      file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
-      if(recv_max_pack_num - check_package_num > 5) { //请求重发
-        recv_max_pack_num = std::min(recv_max_pack_num, file_uptr->File_max_packages());
-        for (int i=check_package_num, cnt = 0; i<= recv_max_pack_num && cnt < 5; ++i) {
-          if (!file_uptr->Check_at_package_number(i)) {
-            RequeseResendPackage(i, con);
-            ++cnt;
-            time_alive_pre = std::chrono::system_clock::now();
+        //数据包到来， 更新上次到来时间
+        time_pack_pre = std::chrono::system_clock::now();
+        //recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
+        max_ack = std::max(max_ack, proto.ack_package_number());
+        std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
+        /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
+        file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
+        while (check_package_num <= file_uptr->File_max_packages() 
+            && file_uptr->Check_at_package_number(check_package_num))
+          ++check_package_num;
+        request_pack_num = std::max(request_pack_num, check_package_num);
+        if (pack_num % 200 == 0 && proto.ack_package_number() - request_pack_num > 300) {
+          if (request_pack_num > file_uptr->File_max_packages()) request_pack_num = check_package_num;
+          for (int i=0; request_pack_num < proto.ack_package_number() && i < 300; ) {
+            if (!file_uptr->Check_at_package_number(request_pack_num)) {
+              RequeseResendPackage(request_pack_num, con);
+              ++i;
+              time_alive_pre = std::chrono::system_clock::now();
+            }
+            ++request_pack_num;
           }
         }
-        //请求一个较大的数据包， 防止因为发送端已经发送完毕，造成每次都要等待请求
-        RequeseResendPackage(std::min(check_package_num+6, file_uptr->File_max_packages()), con);
       }
     } else {    //没有数据， 可能已经发送完成 
       if (time_pack_pre + std::chrono::seconds(5) <= std::chrono::system_clock::now()) {
         std::cout << "发送端已断开连接" << std::endl;
         break;
       }
-      //请求一个较大的数据包， 防止因为发送端已经发送完毕，造成每次都要等待请求
-      RequeseResendPackage(std::min(recv_max_pack_num+100, file_uptr->File_max_packages()), con);
+      //发送请求
+      if (request_pack_num > file_uptr->File_max_packages()) request_pack_num = check_package_num;
+      for (int i= 0; request_pack_num <= file_uptr->File_max_packages() && i < 300;) {
+        if (!file_uptr->Check_at_package_number(request_pack_num)) {
+          RequeseResendPackage(request_pack_num, con);
+          time_alive_pre = std::chrono::system_clock::now();
+          ++i;
+        }
+        ++request_pack_num;
+      }
     }
     while (check_package_num <= file_uptr->File_max_packages()
         && file_uptr->Check_at_package_number(check_package_num))
@@ -106,14 +117,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       if (check_package_num > file_uptr->File_max_packages()) {
         std::cout << "check end" << std::endl;
         break;
-      } else {
-        for (int i=check_package_num; i<= file_uptr->File_max_packages(); ++i) {
-          if (!file_uptr->Check_at_package_number(check_package_num)) {
-            RequeseResendPackage(check_package_num, con);
-            time_alive_pre = std::chrono::system_clock::now();
-          }
-        }
-      }
+      } 
     }
     //超过500毫秒没有心跳包， 发送一次心跳包
     if (time_alive_pre + std::chrono::milliseconds(500) <= std::chrono::system_clock::now()) {
