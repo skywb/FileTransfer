@@ -31,7 +31,7 @@ File::File (std::string file_path,boost::uuids::uuid uuid,
     file_len_ = lseek(filefd_, 0, SEEK_END);
   }
   //计算需要多少个数据包， 创建对应大小的数组
-  pack_is_recved_.resize((file_len_+kFileDataMaxLength-1)/kFileDataMaxLength, false);
+  pack_is_recved_.resize((file_len_+kFileDataMaxLength-1)/kFileDataMaxLength+5, false);
   //文件信息已知， 该数据包已不需要
   pack_is_recved_[0] = true;
 }/*}}}*/
@@ -43,6 +43,7 @@ File::~File() {
 
 //判断文件是否可读
 bool File::Readable() {
+  std::lock_guard<std::mutex> lock(lock_);
   int val = fcntl(filefd_, F_GETFL, 0);
   if (val == -1) {
     //error
@@ -52,6 +53,7 @@ bool File::Readable() {
 
 //判断文件是否可写
 bool File::Writeable() {
+  std::lock_guard<std::mutex> lock(lock_);
   int val = fcntl(filefd_, F_GETFL, 0);
   if (val == -1) {
     //error
@@ -70,6 +72,7 @@ int File::Read(int pack_num, char* buf) {
 #endif
     throw std::string("can't read");
   } 
+  std::lock_guard<std::mutex> lock(lock_);
   lseek(filefd_, (pack_num-1)*kFileDataMaxLength, SEEK_SET); 
   return ::read(filefd_, buf, kFileDataMaxLength);
 }
@@ -79,6 +82,7 @@ void File::Write(int pack_num, const char* data, int len) {
   if (!Writeable()) {
     throw std::string("can't write");
   }
+  std::lock_guard<std::mutex> lock(lock_);
   pack_is_recved_[pack_num] = true;
   lseek(filefd_, (pack_num-1)*kFileDataMaxLength, SEEK_SET);
   ::write(filefd_, data, len);
@@ -86,6 +90,7 @@ void File::Write(int pack_num, const char* data, int len) {
 
 /*检查文件完整性， 返回未到达的数据包*/
 std::vector<int> File::Check() {
+  std::lock_guard<std::mutex> lock(lock_);
   std::vector<int> res;
   for (int i = 0; i < pack_is_recved_.size(); ++i) {
     if (!pack_is_recved_[i]) res.push_back(i);
@@ -96,6 +101,6 @@ std::vector<int> File::Check() {
 
 /*检查一个数据包是否已到达*/
 bool File::Check_at_package_number(int package_num) {
-
+  std::lock_guard<std::mutex> lock(lock_);
   return pack_is_recved_[package_num];
 }

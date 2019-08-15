@@ -20,9 +20,7 @@ bool Bind(sockaddr_in* addr, int* sockfd, std::string ip, int port) {
   // sockfd为需要端口复用的套接字
   setsockopt(*sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&opt, sizeof(opt));
   if(bind(*sockfd, (sockaddr *)addr, sizeof(*addr)) == -1) {
-#if DEBUG
-    std::cout << ip << "bind error " << strerror(errno) << std::endl;
-#endif
+    //std::cout << ip << "bind error " << strerror(errno) << std::endl;
     close(*sockfd);
     *sockfd = -1;
     return false;
@@ -42,6 +40,7 @@ bool JoinGroup (int* sockfd, std::string group_ip, std::string netcard_ip){
   }
   unsigned long if_addr = inet_addr(netcard_ip.c_str());
   int ret = setsockopt(*sockfd, IPPROTO_IP, IP_MULTICAST_IF, (const char*)&if_addr, sizeof(if_addr));
+  (void)ret;  //消除未使用警告
   //not date loop
   unsigned char loop = 0;
   setsockopt(*sockfd, IPPROTO_IP,IP_MULTICAST_LOOP, &loop, sizeof(loop));
@@ -50,27 +49,27 @@ bool JoinGroup (int* sockfd, std::string group_ip, std::string netcard_ip){
 
 //返回所有网卡IP列表
 std::vector<std::string> GetAllNetIP() {
-    struct sockaddr_in *sin = NULL;
-    struct ifaddrs *ifa = NULL, *ifList;
-    //所有网卡地址列表
-    std::vector<std::string> res;
-    if (getifaddrs(&ifList) < 0) {
-      return res;
-    }
-
-    for (ifa = ifList; ifa != NULL; ifa = ifa->ifa_next) {
-        if(ifa->ifa_addr->sa_family == AF_INET) {
-            //printf("\n>>> interfaceName: %s\n", ifa->ifa_name);
-            sin = (struct sockaddr_in *)ifa->ifa_addr;
-            //printf(">>> ipAddress: %s\n", inet_ntoa(sin->sin_addr));
-            res.push_back(std::string(inet_ntoa(sin->sin_addr)));
-            //sin = (struct sockaddr_in *)ifa->ifa_dstaddr;
-            //printf(">>> broadcast: %s\n", inet_ntoa(sin->sin_addr));
-            //sin = (struct sockaddr_in *)ifa->ifa_netmask;
-            //printf(">>> subnetMask: %s\n", inet_ntoa(sin->sin_addr));
-        }
-    }
-    freeifaddrs(ifList);
+  struct sockaddr_in *sin = NULL;
+  struct ifaddrs *ifa = NULL, *ifList;
+  //所有网卡地址列表
+  std::vector<std::string> res;
+  if (getifaddrs(&ifList) < 0) {
     return res;
+  }
+
+  for (ifa = ifList; ifa != NULL; ifa = ifa->ifa_next) {
+    if(ifa->ifa_addr->sa_family == AF_INET) {
+      //printf("\n>>> interfaceName: %s\n", ifa->ifa_name);
+      sin = (struct sockaddr_in *)ifa->ifa_addr;
+      //printf(">>> ipAddress: %s\n", inet_ntoa(sin->sin_addr));
+      res.push_back(std::string(inet_ntoa(sin->sin_addr)));
+      //sin = (struct sockaddr_in *)ifa->ifa_dstaddr;
+      //printf(">>> broadcast: %s\n", inet_ntoa(sin->sin_addr));
+      //sin = (struct sockaddr_in *)ifa->ifa_netmask;
+      //printf(">>> subnetMask: %s\n", inet_ntoa(sin->sin_addr));
+    }
+  }
+  freeifaddrs(ifList);
+  return res;
 }
 

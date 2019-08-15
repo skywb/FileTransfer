@@ -13,85 +13,38 @@
 #include <algorithm>
 
 
-//读取消息内容
-//Proto::Proto (const char *buf, const int len) {
-//  type_ = *(Type*)(buf + kTypeBeg);
-//  switch (type_) {
-//    case kAlive:
-//      break;
-//    case kReSend:
-//      package_num_ = *(int*)(buf+kPackNumberBeg);
-//      break;
-//    case kNewFile: 
-//      group_ip_ = *(uint32_t*)(buf+kGroupIPBeg);
-//      port_ = *(int*)(buf+kPortBeg);
-//      file_len_ = *(int*)(buf+kFileLenBeg);
-//      uuid_ = *(boost::uuids::uuid*)(buf+kFileUUIDBeg);
-//      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf+kFileNameLenBeg));
-//      break;
-//    case kData:
-//      package_num_ = *(int*)(buf+kPackNumberBeg);
-//      file_name_ = std::string(buf+kFileNameBeg, *(int*)(buf+kFileNameLenBeg));
-//      file_data_len_ = *(int*)(buf+kFileDataLenBeg);
-//      break;
-//  }
-//}
 const int Proto::get_send_len() const {
-    Type type = *(Type*)(buf_ + kTypeBeg);
-    switch (type) {
-      case kAlive:
-        return sizeof(Type);
-      case kReSend:
-        return kPackNumberBeg + sizeof(int);
-      case kNewFile:
-        return kFileNameBeg + *(int*)(buf_+kFileNameLenBeg);
-      case kData:
-        return kFileDataBeg + file_data_len();
-    }
-    return 0;
+  Type type = *(Type*)(buf_ + kTypeBeg);
+  switch (type) {
+    case kUnavailable:
+      return 0;
+    case kAlive:
+      return sizeof(Type);
+    case kReSend:
+      return kPackNumberBeg + sizeof(int);
+    case kNewFile:
+      return kFileNameBeg + *(int*)(buf_+kFileNameLenBeg);
+    case kData:
+      return kFileDataBeg + file_data_len();
+  }
+  return 0;
 }
-//bool Proto::Analysis() {
-//    type_ = *(Type*)(buf_ + kTypeBeg);
-//    switch (type_) {
-//      case kAlive:
-//        break;
-//      case kReSend:
-//        package_num_ = *(int*)(buf_+kPackNumberBeg);
-//        break;
-//      case kNewFile:
-//        group_ip_ = *(uint32_t*)(buf_+kGroupIPBeg);
-//        port_ = *(int*)(buf_+kPortBeg);
-//        file_len_ = *(int*)(buf_+kFileLenBeg);
-//        uuid_ = *(boost::uuids::uuid*)(buf_+kFileUUIDBeg);
-//        file_name_ = std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
-//        break;
-//      case kData:
-//        package_num_ = *(int*)(buf_+kPackNumberBeg);
-//        file_name_ = std::string(buf_+kFileNameBeg, *(int*)(buf_+kFileNameLenBeg));
-//        file_data_len_ = *(int*)(buf_+kFileDataLenBeg);
-//        break;
-//    }
-//    return true;
-//}
-
 
 FileSendControl::FileSendControl (std::string group_ip, int port) :
-                                  group_ip_(group_ip), port_(port),
-                                  ip_used_(1000, false), running_(false),
-                                  con(group_ip, port) {
-  //*(FileSendControl::Type*)alive_msg_ = FileSendControl::kAlive;
-  auto ip_net = inet_addr(group_ip_.c_str()); 
-  auto ip_local = ntohl(ip_net);
-  if (ip_local < kMulticastIpMin || ip_local > kMulticastIpMax) {
-    std::cout << "通知多播ip : " << ip_local << std::endl;
-    std::cout << "限制ip范围在224.0.2.10 ~ 224.0.2.255之间" << std::endl;
-    exit(1);
+  group_ip_(group_ip), port_(port),
+  ip_used_(1000, false), running_(false),
+  con(group_ip, port) {
+    auto ip_net = inet_addr(group_ip_.c_str()); 
+    auto ip_local = ntohl(ip_net);
+    if (ip_local < kMulticastIpMin || ip_local > kMulticastIpMax) {
+      std::cout << "通知多播ip : " << ip_local << std::endl;
+      std::cout << "限制ip范围在224.0.2.10 ~ 224.0.2.255之间" << std::endl;
+      exit(1);
+    }
+    ip_used_[ip_local-kMulticastIpMin] = true;
   }
-  ip_used_[ip_local-kMulticastIpMin] = true;
-}
 
 FileSendControl::~FileSendControl () { }
-
 
 /* 通知线程， 每500ms发送一次所有正在发送的文件的信息 */
 static void NoticeCallback() {
@@ -126,7 +79,6 @@ void FileSendControl::SendFile(std::string file_path) {
   auto file_uuid = boost::uuids::random_generator()();
   auto file = std::make_unique<File>(file_name, file_uuid);
   auto file_notice = std::make_unique<FileNotce>();
-  //char *const buf = file_notice->buf_;
   //找到一个可用的ip
   uint32_t ip_local = kMulticastIpMin;
   { std::lock_guard<std::mutex> lock(mutex_);
@@ -177,7 +129,7 @@ void FileSendControl::SendFile(std::string file_path) {
 }
 
 /* 文件发送结束， 处理相关的资源和通知
- */
+*/
 void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_local) {
   std::lock_guard<std::mutex> lock(mutex_);
   //释放占用的组播地址
@@ -185,7 +137,6 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
   auto ctl = GetInstances();
   std::string file_name = file->File_name();
   file_name = file_name.substr(0, file_name.rfind('.'));
-  //file_name = file_name.substr(0, file_name.rfind('.'));
   //修改该文件的发送状态， 通知线程会停止发送该文件的发送通知
   for (auto it = file_is_sending_.begin(); it != file_is_sending_.end(); ++it) {
     if ((*it)->uuid_ == file->UUID()) {
@@ -202,7 +153,6 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
   std::string cmd = "rm -f ";
   cmd += file->File_name();
   system(cmd.c_str());
-  //std::cout << "delete " << file->File_name() << std::endl;
   file.release();
 }
 
@@ -299,20 +249,10 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
         std::cout << "type != kNewFile" << std::endl;
       }
       //按照协议格式读取数据
-      //uint32_t ip_local = *(uint32_t*)(buf+kGroupIPBeg);
       uint32_t ip_local = proto.group_ip();
-      //int port_recv = *(int*)(buf+kPortBeg);
       int port_recv = proto.port();
-      //int filename_len = *(int*)(buf+FileSendControl::kFileNameLenBeg);
-      //int filename_len = *(int*)(buf+FileSendControl::kFileNameLenBeg);
-      //file_uuid = *(boost::uuids::uuid*)(buf+FileSendControl::kFileUUIDBeg);
       file_uuid = proto.uuid();
-      //int file_len = *(int*)(buf+FileSendControl::kFileLenBeg);
       int file_len = proto.file_len();
-      //char file_name[File::kFileNameMaxLen];
-      //strncpy(file_name, buf+FileSendControl::kFileNameBeg, File::kFileNameMaxLen);
-      //file_name[filename_len] = 0;
-
       std::string file_name = proto.file_name();
       /*: 判断是否已经传输 <30-07-19, 王彬> */
       auto conse = FileSendControl::GetInstances();
@@ -322,7 +262,6 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       //通知前端
       std::string file_name_front(file_name);
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
-      //file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
       auto ctl = FileSendControl::GetInstances();
       std::vector<std::string> msg;
       msg.push_back(file_name_front);
@@ -354,8 +293,6 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
 void FileSendControl::SendNoticeToClient() {
   std::lock_guard<std::mutex> lock(mutex_);
   for (auto& i : file_is_sending_) {
-    //std::cout << "notice client " << *(Type*)(i->buf_) << std::endl;
-    //std::cout << i->len_ << std::endl;
     con.Send(i->buf_, i->len_);
   }
   for (auto it = file_is_recving_.begin(); it != file_is_recving_.end(); ++it) {
@@ -368,7 +305,7 @@ void FileSendControl::SendNoticeToClient() {
 
 //调用通知前端的回调函数
 void FileSendControl::NoticeFront(const boost::uuids::uuid file_uuid,
-                                  const FileSendControl::Type type,
-                                  std::vector<std::string> msg) {
-    NoticeFront_(file_uuid, type, msg);
+    const FileSendControl::Type type,
+    std::vector<std::string> msg) {
+  NoticeFront_(file_uuid, type, msg);
 }
