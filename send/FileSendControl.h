@@ -22,7 +22,8 @@ public:
     kData = 4         // 数据包
   };
 private:
-  static const int kTypeBeg = 0;
+  //协议位置常量
+  static const int kTypeBeg = 0;/*{{{*/
   static const int kPackNumberBeg = kTypeBeg + sizeof(Type);
   static const int kAckPackNumberBeg = kPackNumberBeg + sizeof(int);
   static const int kGroupIPBeg = kAckPackNumberBeg + sizeof(int);
@@ -32,13 +33,11 @@ private:
   static const int kFileNameLenBeg = kFileUUIDBeg + sizeof(boost::uuids::uuid);
   static const int kFileNameBeg = kFileNameLenBeg + sizeof(int);
   static const int kFileDataLenBeg = kFileNameBeg + File::kFileNameMaxLen;
-  static const int kFileDataBeg = kFileDataLenBeg  + sizeof(int);
+  static const int kFileDataBeg = kFileDataLenBeg  + sizeof(int);/*}}}*/
 public:
   static const int kPackHadeMaxLen = kFileDataLenBeg;
-  //读取消息内容
-  //Proto (const char *buf, const int len);
   Proto () { memset(buf_, 0, BUFSIZ);}
-  //bool Analysis();
+/*set 方法{{{*/
   void set_type(Type type) { *(Type*)(buf_+kTypeBeg) = type; }
   void set_group_ip(uint32_t group_ip) { *(uint32_t*)(buf_+kGroupIPBeg) = group_ip; }
   void set_port(int port) { *(int*)(buf_+kPortBeg) = port; }
@@ -51,7 +50,8 @@ public:
   void set_ack_package_number(int ack_num) { *(int*)(buf_+kAckPackNumberBeg) = ack_num; }
   void set_package_number(int package_num) { *(int*)(buf_+kPackNumberBeg) = package_num; }
   void set_file_data_len(int len) { *(int*)(buf_+kFileDataLenBeg) = len; }
-  //void set_file_data(const char* data) { memcpy(buf_+kFileDataBeg, data, file_data_len_); }
+/*}}}*/
+  /* get 方法 {{{*/
   char* get_file_data_buf_ptr() { return buf_+kFileDataBeg;}
   const Type type() const { return *(Type*)(buf_+kTypeBeg); }
   const uint32_t group_ip() const { return  *(uint32_t*)(buf_+kGroupIPBeg); }
@@ -65,12 +65,12 @@ public:
   const int ack_package_number() {  return *(int*)(buf_+kAckPackNumberBeg); }
   const int file_data_len() const { return *(int*)(buf_+kFileDataLenBeg); }
   const int get_send_len() const;
+/*}}}*/
   char* buf() {return buf_;}
   virtual ~Proto () {}
 private:
   char buf_[BUFSIZ];
 };
-
 
 const int kBufSize = Proto::kPackHadeMaxLen+File::kFileDataMaxLength+10;
 

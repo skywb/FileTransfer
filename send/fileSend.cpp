@@ -21,7 +21,7 @@
  * 想每个网卡发送相同的信息
  */
 bool FileSend(std::string group_ip, 
-              int port, std::unique_ptr<File>& file_uptr) {
+    int port, std::unique_ptr<File>& file_uptr) {
   Connecter con(group_ip, port);
   LostPackageVec losts(file_uptr->File_max_packages());
   //启动一个线程，监听丢失的包
@@ -38,14 +38,13 @@ bool FileSend(std::string group_ip,
       if (!lose.empty()) {
         //重发
         for (auto j : lose) {
-          std::cout << "重发 package_num " << i << std::endl;
+          //std::cout << "重发 package_num " << i << std::endl;
           if (j > i) break;
           SendFileDataAtPackNum(con, file_uptr, j, i);
         }
       }
     }
   }
-  //std::cout << "发送完毕, 开始校验" << std::endl;
   //检查所有的丢包情况， 并重发
   int end_pack = file_uptr->File_max_packages();
   while (!losts.ExitListen()) {
@@ -68,11 +67,9 @@ void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
   //发送文件信息
   Proto proto;
   proto.set_type(Proto::kNewFile);
-  char buf[kBufSize];
   proto.set_package_number(0);
   proto.set_file_name(file->File_name());
   proto.set_file_len(file->File_len());
-  int len = 0;
   con.Send(proto.buf(), proto.get_send_len());
 }
 
@@ -97,7 +94,7 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
     proto.set_file_data_len(re);
     //std::cout << "send pack " << proto.package_numbuer() << std::endl;
     if (-1 == con.Send(proto.buf(), proto.get_send_len())) {
-        std::cout << "send error " << package_numbuer << std::endl;
+      std::cout << "send error " << package_numbuer << std::endl;
     }
   } else {
     std::cout << "package_num < 0" << std::endl;
@@ -109,7 +106,6 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
  * 线程任务
  */
 void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) {
-  //char buf[kBufSize];
   auto time_pre = std::chrono::system_clock::now();
   Proto proto;
   while (losts.isRunning()) {
@@ -118,7 +114,7 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
       //std::cout << "recv " << re << " Bytes  " << *(Proto::Type*)(proto.buf()) << std::endl;
       if (Proto::kReSend == proto.type()) {
         time_pre = std::chrono::system_clock::now();
-        std::cout << "recved pack resend request " << proto.package_numbuer() << std::endl;
+        //std::cout << "recved pack resend request " << proto.package_numbuer() << std::endl;
         losts.AddFileLostedRecord(proto.package_numbuer());
       }
       if (Proto::kAlive == proto.type()) {
@@ -137,7 +133,7 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
 LostPackageVec::LostPackageVec (int package_count) : 
   package_count_(package_count),
   lost_(package_count_+1), running_(true) {
-}
+  }
 
 LostPackageVec::~LostPackageVec () { }
 
@@ -172,10 +168,10 @@ bool LostPackageVec::ExitListen() {
   std::unique_lock<std::mutex> lock(lock_);
   auto t = std::chrono::system_clock::now();
   t += std::chrono::seconds(5);
-  std::cout << "sleepping..." << std::endl;
+  //std::cout << "sleepping..." << std::endl;
   if (cond_.wait_until(lock, t) == std::cv_status::timeout) {
-      running_ = false;
-      return true;
+    running_ = false;
+    return true;
   }
   return false;
 }

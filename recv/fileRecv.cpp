@@ -55,7 +55,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
           break;
         }
       } else if (type != Proto::kData) {
-        std::cout << "非法type value is " << type  << std::endl;
+        //std::cout << "非法type value is " << type  << std::endl;
         //超时没有数据包到达， 可能发送端已经断开连接
         if (time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
           break;
@@ -68,12 +68,11 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         //数据包到来， 更新上次到来时间
         time_pack_pre = std::chrono::system_clock::now();
         max_ack = std::max(max_ack, proto.ack_package_number());
-        std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
+        //std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
         /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
         file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
         while (check_package_num <= file_uptr->File_max_packages() 
             && file_uptr->Check_at_package_number(check_package_num)) {
-          std::cout << check_package_num << " check " << file_uptr->Check_at_package_number(check_package_num) <<  " " << __LINE__ << std::endl;
           ++check_package_num;
         }
         request_pack_num = std::max(request_pack_num, check_package_num);
@@ -107,14 +106,12 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
     }
     while (check_package_num <= file_uptr->File_max_packages()
         && file_uptr->Check_at_package_number(check_package_num)) {
-      std::cout << check_package_num << " check " << file_uptr->Check_at_package_number(check_package_num) <<  " " << __LINE__ << std::endl;
       ++check_package_num;
     }
     if (check_package_num > file_uptr->File_max_packages()) {   //数据可能已经全部到达， 检查是否已经全部到达
       check_package_num = 0;
       while (check_package_num <= file_uptr->File_max_packages() 
           && file_uptr->Check_at_package_number(check_package_num)) {
-          std::cout << check_package_num << " check " << file_uptr->Check_at_package_number(check_package_num) <<  " " << __LINE__ << std::endl;
         ++check_package_num;
       }
       if (check_package_num > file_uptr->File_max_packages()) {
@@ -134,10 +131,9 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   check_package_num = 0;
   while (check_package_num <= file_uptr->File_max_packages() 
       && file_uptr->Check_at_package_number(check_package_num)) {
-          std::cout << check_package_num << " check " << file_uptr->Check_at_package_number(check_package_num) <<  " " << __LINE__ << std::endl;
     ++check_package_num;
   }
-  std::cout << check_package_num << " " << file_uptr->File_max_packages() << std::endl;
+  //std::cout << check_package_num << " " << file_uptr->File_max_packages() << std::endl;
   return check_package_num > file_uptr->File_max_packages();
 }
 

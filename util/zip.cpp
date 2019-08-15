@@ -6,8 +6,7 @@
 #include <fstream>
 #include <dirent.h>
 
-static bool is_dir(const std::string& dir)
-{
+static bool is_dir(const std::string& dir) {
   struct stat st;
   ::stat(dir.c_str(), &st);
   return S_ISDIR(st.st_mode);
@@ -43,8 +42,7 @@ static void walk_directory(const std::string& startdir, const std::string& input
   ::closedir(dp);
 }
 
-static std::string Zipdir(const std::string& inputdir, const std::string& output_filename)
-{
+static std::string Zipdir(const std::string& inputdir, const std::string& output_filename) {
   int errorp;
   zip_t *zipper = zip_open(output_filename.c_str(), ZIP_CREATE | ZIP_EXCL, &errorp);
   if (zipper == nullptr) {
@@ -58,7 +56,6 @@ static std::string Zipdir(const std::string& inputdir, const std::string& output
     zip_close(zipper);
     throw;
   }
-
   zip_close(zipper);
   return output_filename;
 }
@@ -98,20 +95,19 @@ std::string Zip(const std::string& filePath, const std::string& savePath) {
   return zipfile_name;
 }
 
-std::string Unzip(const std::string& filePath, const std::string& savePath)
-{
-	int err = 0;
-	struct zip *pZip;
-	pZip = zip_open(filePath.c_str(), 0, &err);
-    if (!pZip) {
-        std::cerr << zip_strerror(pZip) << std::endl;
-    }
-	int fileCount;
+std::string Unzip(const std::string& filePath, const std::string& savePath) {
+  int err = 0;
+  struct zip *pZip;
+  pZip = zip_open(filePath.c_str(), 0, &err);
+  if (!pZip) {
+    std::cerr << zip_strerror(pZip) << std::endl;
+  }
+  int fileCount;
   std::string start_path = savePath;
   if (start_path[start_path.size() - 1] != '/')
-      start_path += "/";
+    start_path += "/";
   std::string file_path;
-	fileCount = zip_get_num_files(pZip);
+  fileCount = zip_get_num_files(pZip);
   if (fileCount > 1) {
     std::string cmd = "rm -rf ";
     std::string dirName = filePath.substr(0, filePath.find_last_of('.'));
@@ -123,11 +119,10 @@ std::string Unzip(const std::string& filePath, const std::string& savePath)
     else 
       start_path = dirName;
   }
-	for (unsigned int i = 0; i < fileCount ; i++) {
-		struct zip_stat zipStat = {0};
-		zip_stat_init(&zipStat);
-		zip_stat_index(pZip, i, 0, &zipStat);
-    //std::cout << i << "th file name is " << zipStat.name << std::endl;
+  for (unsigned int i = 0; i < fileCount ; i++) {
+    struct zip_stat zipStat = {0};
+    zip_stat_init(&zipStat);
+    zip_stat_index(pZip, i, 0, &zipStat);
     if (zipStat.name[strlen(zipStat.name) -1] == '/') {
       std::string cmd = "rm -rf ";
       if (!start_path.empty())
@@ -135,23 +130,23 @@ std::string Unzip(const std::string& filePath, const std::string& savePath)
       else 
         file_path = zipStat.name;
       cmd += file_path.c_str();
-			system(cmd.c_str());
-			mkdir(file_path.c_str(), 0777);
-			continue;
-		}
-		struct zip_file *pzipFile = zip_fopen_index(pZip, i, 0);
-		char *buf = new char[zipStat.size];
-		zip_fread(pzipFile, buf, zipStat.size);
-		std::fstream fs;
+      system(cmd.c_str());
+      mkdir(file_path.c_str(), 0777);
+      continue;
+    }
+    struct zip_file *pzipFile = zip_fopen_index(pZip, i, 0);
+    char *buf = new char[zipStat.size];
+    zip_fread(pzipFile, buf, zipStat.size);
+    std::fstream fs;
     if (!start_path.empty()) {
       if (start_path[start_path.length()-1] != '/') start_path += "/";
       file_path = start_path +  zipStat.name;
     }
     else 
       file_path = zipStat.name;
-		fs.open(file_path.c_str(), std::fstream::binary | std::fstream::out);
-		fs.write(buf,zipStat.size);
-		fs.close();
-	}
+    fs.open(file_path.c_str(), std::fstream::binary | std::fstream::out);
+    fs.write(buf,zipStat.size);
+    fs.close();
+  }
   return filePath.substr(0, filePath.find_last_of('.'));
 }
