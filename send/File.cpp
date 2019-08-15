@@ -31,7 +31,7 @@ File::File (std::string file_path,boost::uuids::uuid uuid,
     file_len_ = lseek(filefd_, 0, SEEK_END);
   }
   //计算需要多少个数据包， 创建对应大小的数组
-  pack_is_recved_.resize((file_len_+kFileDataMaxLength-1)/kFileDataMaxLength, false);
+  pack_is_recved_.resize((file_len_+kFileDataMaxLength-1)/kFileDataMaxLength+5, false);
   //文件信息已知， 该数据包已不需要
   pack_is_recved_[0] = true;
 }/*}}}*/
