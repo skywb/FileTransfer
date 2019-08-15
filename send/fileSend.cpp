@@ -45,7 +45,7 @@ bool FileSend(std::string group_ip,
       }
     }
   }
-  std::cout << "发送完毕, 开始校验" << std::endl;
+  //std::cout << "发送完毕, 开始校验" << std::endl;
   //检查所有的丢包情况， 并重发
   int end_pack = file_uptr->File_max_packages();
   while (!losts.ExitListen()) {
@@ -53,7 +53,7 @@ bool FileSend(std::string group_ip,
     if (!lose.empty()) {
       //重发
       for (auto i : lose) {
-        std::cout << "重发 package_num " << i << std::endl;
+        //std::cout << "重发 package_num " << i << std::endl;
         SendFileDataAtPackNum(con, file_uptr, i, end_pack);
       }
     }
@@ -69,17 +69,10 @@ void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
   Proto proto;
   proto.set_type(Proto::kNewFile);
   char buf[kBufSize];
-  //*(int*)(buf+kPackNumberBeg) = (int)0;
   proto.set_package_number(0);
-  //*(buf+kFileNameLenBeg) = file->File_name().size();
   proto.set_file_name(file->File_name());
-  //char file_name[100];
-  //strcpy(file_name, file->File_name().c_str());
-  //::strncpy(buf+kFileNameBeg, file_name, File::kFileNameMaxLen);
-  //*(int*)(buf+kFileLenBeg) = file->File_len();
   proto.set_file_len(file->File_len());
   int len = 0;
-  //proto.buf(Proto::kNewFile, buf, len);
   con.Send(proto.buf(), proto.get_send_len());
 }
 
@@ -102,7 +95,7 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
       std::cout << "read len < 0" << __FILE__ << __LINE__ << std::endl;
     }
     proto.set_file_data_len(re);
-    std::cout << "send pack " << proto.package_numbuer() << std::endl;
+    //std::cout << "send pack " << proto.package_numbuer() << std::endl;
     if (-1 == con.Send(proto.buf(), proto.get_send_len())) {
         std::cout << "send error " << package_numbuer << std::endl;
     }

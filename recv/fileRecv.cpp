@@ -20,7 +20,7 @@ static void RequeseResendPackage(int package_num, Connecter& con) {
   Proto request;
   request.set_type(Proto::kReSend);
   request.set_package_number(package_num);
-  std::cout << "request " << package_num << std::endl;
+  //std::cout << "request " << package_num << std::endl;
   con.Send(request.buf(), request.get_send_len());
 }
 
@@ -34,7 +34,6 @@ static void RequeseResendPackage(int package_num, Connecter& con) {
  */
 bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) {
   Connecter con(group_ip, port);
-  //char buf[kBufSize]; //接收缓冲区
   int recv_len = 0;  //接收的长度
   //上次更新心跳包的时间
   auto time_alive_pre = std::chrono::system_clock::now();
@@ -42,7 +41,6 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   //检查的包序号
   int request_pack_num = 1, check_package_num = 1, max_ack = 0;
   Proto proto;
-  //for (int i = 0; ; ++i) {
   while (true) {
     recv_len = con.Recv(proto.buf(), kBufSize, 500);
     if (recv_len > 0) {  
@@ -69,14 +67,15 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         }
         //数据包到来， 更新上次到来时间
         time_pack_pre = std::chrono::system_clock::now();
-        //recv_max_pack_num = std::max(pack_num, recv_max_pack_num);
         max_ack = std::max(max_ack, proto.ack_package_number());
         std::cout << "recv package " << pack_num << " len is " << proto.file_data_len() << std::endl;
         /* TODO: 检查文件长度， 防止非法长度造成错误 <22-07-19, 王彬> */
         file_uptr->Write(pack_num, proto.get_file_data_buf_ptr(), proto.file_data_len());
         while (check_package_num <= file_uptr->File_max_packages() 
-            && file_uptr->Check_at_package_number(check_package_num))
+            && file_uptr->Check_at_package_number(check_package_num)) {
+          std::cout << check_package_num << " check " << file_uptr->Check_at_package_number(check_package_num) <<  " " << __LINE__ << std::endl;
           ++check_package_num;
+        }
         request_pack_num = std::max(request_pack_num, check_package_num);
         if (pack_num % 200 == 0 && proto.ack_package_number() - request_pack_num > 300) {
           if (request_pack_num > file_uptr->File_max_packages()) request_pack_num = check_package_num;
@@ -107,13 +106,17 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       }
     }
     while (check_package_num <= file_uptr->File_max_packages()
-        && file_uptr->Check_at_package_number(check_package_num))
+        && file_uptr->Check_at_package_number(check_package_num)) {
+      std::cout << check_package_num << " check " << file_uptr->Check_at_package_number(check_package_num) <<  " " << __LINE__ << std::endl;
       ++check_package_num;
+    }
     if (check_package_num > file_uptr->File_max_packages()) {   //数据可能已经全部到达， 检查是否已经全部到达
       check_package_num = 0;
       while (check_package_num <= file_uptr->File_max_packages() 
-          && file_uptr->Check_at_package_number(check_package_num))
+          && file_uptr->Check_at_package_number(check_package_num)) {
+          std::cout << check_package_num << " check " << file_uptr->Check_at_package_number(check_package_num) <<  " " << __LINE__ << std::endl;
         ++check_package_num;
+      }
       if (check_package_num > file_uptr->File_max_packages()) {
         std::cout << "check end" << std::endl;
         break;
@@ -130,10 +133,11 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   //断开连接， 检查是否数据全部到达
   check_package_num = 0;
   while (check_package_num <= file_uptr->File_max_packages() 
-      && file_uptr->Check_at_package_number(check_package_num))
+      && file_uptr->Check_at_package_number(check_package_num)) {
+          std::cout << check_package_num << " check " << file_uptr->Check_at_package_number(check_package_num) <<  " " << __LINE__ << std::endl;
     ++check_package_num;
+  }
   std::cout << check_package_num << " " << file_uptr->File_max_packages() << std::endl;
   return check_package_num > file_uptr->File_max_packages();
-  //return true;
 }
 
