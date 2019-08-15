@@ -78,7 +78,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
             && file_uptr->Check_at_package_number(check_package_num))
           ++check_package_num;
         request_pack_num = std::max(request_pack_num, check_package_num);
-        if (proto.ack_package_number() - request_pack_num > 300) {
+        if (pack_num % 200 == 0 && proto.ack_package_number() - request_pack_num > 300) {
           if (request_pack_num > file_uptr->File_max_packages()) request_pack_num = check_package_num;
           for (int i=0; request_pack_num < proto.ack_package_number() && i < 300; ) {
             if (!file_uptr->Check_at_package_number(request_pack_num)) {

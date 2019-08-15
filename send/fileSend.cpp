@@ -131,10 +131,11 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
       if (Proto::kAlive == proto.type()) {
         time_pre = std::chrono::system_clock::now();
       }
-    }
-    if (time_pre + std::chrono::seconds(5) <= std::chrono::system_clock::now()) {
-      std::cout << "all client quit" << std::endl;
-      losts.ExecRunning();
+    } else {
+      if (time_pre + std::chrono::seconds(5) <= std::chrono::system_clock::now()) {
+        std::cout << "all client quit" << std::endl;
+        losts.ExecRunning();
+      }
     }
   }
 }
