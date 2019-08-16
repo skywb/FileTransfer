@@ -42,7 +42,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   int request_pack_num = 1, check_package_num = 1, max_ack = 0;
   Proto proto;
   while (true) {
-    recv_len = con.Recv(proto.buf(), kBufSize, 500);
+    recv_len = con.Recv(proto.buf(), kBufSize, 300);
     if (recv_len > 0) {  
       //有数据到来
       Proto::Type type;
@@ -78,7 +78,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         request_pack_num = std::max(request_pack_num, check_package_num);
         if (pack_num % 200 == 0 && proto.ack_package_number() - request_pack_num > 300) {
           if (request_pack_num > file_uptr->File_max_packages()) request_pack_num = check_package_num;
-          for (int i=0; request_pack_num < proto.ack_package_number() && i < 300; ) {
+          for (int i=0; request_pack_num < proto.ack_package_number() && i < 600; ) {
             if (!file_uptr->Check_at_package_number(request_pack_num)) {
               RequeseResendPackage(request_pack_num, con);
               ++i;
@@ -95,7 +95,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       }
       //发送请求
       if (request_pack_num > file_uptr->File_max_packages()) request_pack_num = check_package_num;
-      for (int i= 0; request_pack_num <= file_uptr->File_max_packages() && i < 300;) {
+      for (int i= 0; request_pack_num <= file_uptr->File_max_packages() && i < 1000;) {
         if (!file_uptr->Check_at_package_number(request_pack_num)) {
           RequeseResendPackage(request_pack_num, con);
           time_alive_pre = std::chrono::system_clock::now();
