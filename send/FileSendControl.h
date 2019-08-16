@@ -65,6 +65,7 @@ public:
   const int ack_package_number() {  return *(int*)(buf_+kAckPackNumberBeg); }
   const int file_data_len() const { return *(int*)(buf_+kFileDataLenBeg); }
   const int get_send_len() const;
+  const int BufSize() const { return BUFSIZ; }
 /*}}}*/
   char* buf() {return buf_;}
   virtual ~Proto () {}
