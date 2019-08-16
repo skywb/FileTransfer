@@ -12,7 +12,7 @@
 class File
 {
 public:
-  static const int kFileDataMaxLength = 5000;
+  static const int kFileDataMaxLength = 1000;
   static const int kFileNameMaxLen = 100;
   enum Stat {
     kSendend = 1,
