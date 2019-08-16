@@ -98,13 +98,13 @@ public:
     kNewFile = 1,    //接收的新的文件
     kRecvend = 2,    // 接收完毕
     kSendend = 3,    // 发送完毕
-    kNewSendFile = 4,
-    kClientExec = 5,
-    kNetError = 6
+    kNewSendFile = 4, // 新发送的文件
+    kClientExec = 5,  //接收端异常退出
+    kNetError = 6     // 发送端异常，或网络异常
   };
 
-  static const uint32_t kMulticastIpMin = 3758096897; //224.0.0.10
-  static const uint32_t kMulticastIpMax = 4009754623; //224.0.0.255
+  static const uint32_t kMulticastIpMin = 3758096897; //224.0.2.1
+  static const uint32_t kMulticastIpMax = 4009754623; //238.255.255.255
 public:
   virtual ~FileSendControl ();
   void SendFile(std::string file_path);
