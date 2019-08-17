@@ -22,43 +22,44 @@
  */
 bool FileSend(std::string group_ip, 
     int port, std::unique_ptr<File>& file_uptr) {
-  Connecter con(group_ip, port);
-  LostPackageVec losts(file_uptr->File_max_packages());
-  //启动一个线程，监听丢失的包
-  std::thread listen(ListenLostPackageCallback, port+1, std::ref(losts), std::ref(con)); //修改端口， 参数： socket， addr, losts
-  //设置多播地址
-  //发送文件内容
-  for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
-    SendFileDataAtPackNum(con, file_uptr, i, i); 
-    if (!losts.isRunning()) {
-      return false;
-    }
-    if (i % 300 == 0) {
-      auto lose = losts.GetFileLostedPackage();
-      if (!lose.empty()) {
-        //重发
-        for (auto j : lose) {
-          //std::cout << "重发 package_num " << i << std::endl;
-          if (j > i) break;
-          SendFileDataAtPackNum(con, file_uptr, j, i);
-        }
-      }
-    }
-  }
-  //检查所有的丢包情况， 并重发
-  int end_pack = file_uptr->File_max_packages();
-  while (!losts.ExitListen()) {
-    auto lose = losts.GetFileLostedPackage();
-    if (!lose.empty()) {
-      //重发
-      for (auto i : lose) {
-        //std::cout << "重发 package_num " << i << std::endl;
-        SendFileDataAtPackNum(con, file_uptr, i, end_pack);
-      }
-    }
-  }
-  listen.join();
-  return true;
+/* TODO:  <17-08-19, yourname> */
+  //Connecter con(group_ip, port);
+  //LostPackageVec losts(file_uptr->File_max_packages());
+  ////启动一个线程，监听丢失的包
+  //std::thread listen(ListenLostPackageCallback, port+1, std::ref(losts), std::ref(con)); //修改端口， 参数： socket， addr, losts
+  ////设置多播地址
+  ////发送文件内容
+  //for (int i = 0; i <= file_uptr->File_max_packages(); ++i) {
+  //  SendFileDataAtPackNum(con, file_uptr, i, i); 
+  //  if (!losts.isRunning()) {
+  //    return false;
+  //  }
+  //  if (i % 300 == 0) {
+  //    auto lose = losts.GetFileLostedPackage();
+  //    if (!lose.empty()) {
+  //      //重发
+  //      for (auto j : lose) {
+  //        //std::cout << "重发 package_num " << i << std::endl;
+  //        if (j > i) break;
+  //        SendFileDataAtPackNum(con, file_uptr, j, i);
+  //      }
+  //    }
+  //  }
+  //}
+  ////检查所有的丢包情况， 并重发
+  //int end_pack = file_uptr->File_max_packages();
+  //while (!losts.ExitListen()) {
+  //  auto lose = losts.GetFileLostedPackage();
+  //  if (!lose.empty()) {
+  //    //重发
+  //    for (auto i : lose) {
+  //      //std::cout << "重发 package_num " << i << std::endl;
+  //      SendFileDataAtPackNum(con, file_uptr, i, end_pack);
+  //    }
+  //  }
+  //}
+  //listen.join();
+  //return true;
 }
 
 //计算文件的长度， 想多播组发送包号为0的数据包
@@ -105,26 +106,26 @@ void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
  * 保存到LostPackageVec中
  * 线程任务
  */
-void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) {
-  auto time_pre = std::chrono::system_clock::now();
+void ListenLostPackageCallback(LostPackageVec& losts, Connecter& con) {
+/* TODO: 从con中读取数据，
+ * 若为重传请求
+ *  将包号保存到lostvec中， 并唤醒发送线程 send_cond_.notify_one
+ * 若为心跳包， 更新心跳包时间 
+ * 不可读直接再次等待条件变量 recv_cond_<17-08-19, yourname> */
   Proto proto;
+  auto now = std::chrono::system_clock::now();
   while (losts.isRunning()) {
-    int re = con.Recv(proto.buf(), BUFSIZ, 1000);
-    if (re > 0) {
-      //std::cout << "recv " << re << " Bytes  " << *(Proto::Type*)(proto.buf()) << std::endl;
+    while (-1 != con.Recv(proto.buf(), proto.BufSize())) {
       if (Proto::kReSend == proto.type()) {
-        time_pre = std::chrono::system_clock::now();
-        //std::cout << "recved pack resend request " << proto.package_numbuer() << std::endl;
         losts.AddFileLostedRecord(proto.package_numbuer());
+      } else if (Proto::kAlive == proto.type()) {
+
       }
-      if (Proto::kAlive == proto.type()) {
-        time_pre = std::chrono::system_clock::now();
-      }
-    } else {
-      if (time_pre + std::chrono::seconds(5) <= std::chrono::system_clock::now()) {
-        std::cout << "all client quit" << std::endl;
-        losts.ExecRunning();
-      }
+      now = std::chrono::system_clock::now();
+    }
+    if (!losts.WaitRecvable(now + std::chrono::seconds(3))) {
+      losts.ExecRunning();
+      return;
     }
   }
 }
@@ -132,20 +133,23 @@ void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con) 
 
 LostPackageVec::LostPackageVec (int package_count) : 
   package_count_(package_count),
-  lost_(package_count_+1), running_(true) {
-  }
+  lost_(package_count_+1), running_(false) { }
 
-LostPackageVec::~LostPackageVec () { }
+LostPackageVec::~LostPackageVec () { 
+  listen_thread_.join();
+}
 
 /*
  * 获取丢失的包的集合， 返回一个vector
  */
 std::vector<int> LostPackageVec::GetFileLostedPackage() {
-  std::lock_guard<std::mutex> lock(lock_);
+  std::unique_lock<std::mutex> lock(send_lock_);
   std::vector<int> res;
-  for (int i = 0; i <= package_count_; ++i) {
+  send_cond_.wait(lock);
+  for (int i = 0, cnt = 0; i <= package_count_ && cnt < 1000; ++i) {
     if (lost_[i]) {
       res.push_back(i);
+      ++cnt;
       lost_[i] = false;
     } 
   }
@@ -154,29 +158,13 @@ std::vector<int> LostPackageVec::GetFileLostedPackage() {
 
 //添加一个丢失记录
 void LostPackageVec::AddFileLostedRecord(int package_num) {
-  std::lock_guard<std::mutex> lock(lock_);
+  std::lock_guard<std::mutex> lock(send_lock_);
   lost_[package_num] = true;
-  cond_.notify_one();
+  send_cond_.notify_one();
 }
 
-/* 尝试退出子线程, 若没有数据包
- * 若没有数据包，则退出子线程，并返回true
- * 否则返回false
- */
-bool LostPackageVec::ExitListen() {
-  if (!isRunning()) return true;
-  std::unique_lock<std::mutex> lock(lock_);
-  auto t = std::chrono::system_clock::now();
-  t += std::chrono::seconds(5);
-  //std::cout << "sleepping..." << std::endl;
-  if (cond_.wait_until(lock, t) == std::cv_status::timeout) {
-    running_ = false;
-    return true;
-  }
-  return false;
-}
 
 bool LostPackageVec::isRunning() {
-  std::lock_guard<std::mutex> lock(lock_);
+  std::lock_guard<std::mutex> lock(running_lock_);
   return  running_;
 }

@@ -35,9 +35,9 @@ Connecter::Connecter (std::string group_ip, int port) {
 
   for (auto i = sockets.cbegin(); i != sockets.cend(); ++i) {
     event_.data.fd = *i;
-    event_.events = EPOLLIN | EPOLLET;
+    event_.events = EPOLLIN;
     epoll_ctl(epoll_root_, EPOLL_CTL_ADD, *i, &event_);
-    event_.events = EPOLLOUT | EPOLLET;
+    event_.events = EPOLLOUT;
     epoll_ctl(epoll_root_, EPOLL_CTL_ADD, *i, &event_);
   }
   sockfd_iter = sockets.cbegin();
@@ -55,9 +55,13 @@ int Connecter::Recv(char* buf, int len) {
   sockaddr_in addr;
   socklen_t addr_len = sizeof(addr);
   if (sockets.size() <= 0) return -1;
-  if (sockfd_iter == sockets.cend()) sockfd_iter = sockets.cbegin();
-  int re = recvfrom(*sockfd_iter, buf, len, 0, (sockaddr*)&addr, &addr_len);
-  return re;
+  for (int i=0; i<sockets.size(); ++i) {
+    if (sockfd_iter == sockets.cend()) sockfd_iter = sockets.cbegin();
+    int re = recvfrom(*sockfd_iter, buf, len, 0, (sockaddr*)&addr, &addr_len);
+    ++sockfd_iter;
+    if (re > 0) return re;
+  }
+  return -1;
 }
 
 int Connecter::Send(char* buf, int len) {

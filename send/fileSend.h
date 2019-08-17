@@ -27,19 +27,34 @@ public:
    * 若没有数据包，则退出子线程，并返回true
    * 否则返回false
    */
-  bool ExitListen();
+  //bool ExitListen();
   //检查是否正在运行
+  void RegestListenCallback(void *func(LostPackageVec& , Connecter& ), Connecter& con) {
+    std::thread th(func, *this, con);
+    listen_thread_.swap(th);
+    std::lock_guard<std::mutex> lock(running_lock_);
+    running_ = true;
+  }
+  bool WaitRecvable(std::chrono::time_point<std::chrono::system_clock> time) {
+    std::unique_lock<std::mutex> lock(recv_lock_);
+    if (std::cv_status::timeout == recv_cond_.wait_until(lock, time)) return false;
+    return isRunning();
+  }
   bool isRunning();
   void ExecRunning() {
-    std::lock_guard<std::mutex> lock(lock_);
+    std::lock_guard<std::mutex> lock(running_lock_);
     running_ = false;
   }
 
 private:
+  std::thread listen_thread_;
   int package_count_;    //包数量
   std::vector<bool> lost_;  //丢失记录
-  std::mutex lock_;
-  std::condition_variable cond_;   //唤醒正在发送端重发数据包
+  std::mutex send_lock_;
+  std::mutex recv_lock_;
+  std::condition_variable send_cond_;   //唤醒正在发送端重发数据包
+  std::condition_variable recv_cond_;   //唤醒正在发送端重发数据包
+  std::mutex running_lock_;
   bool running_;
 };
 
@@ -53,6 +68,6 @@ void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file);
 void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer, int ack_num);
 
 //监听接收端丢失的包   --- 线程回调函数
-void ListenLostPackageCallback(int port, LostPackageVec& losts, Connecter& con);
+void ListenLostPackageCallback(LostPackageVec& lost, Connecter& con);
 
 #endif /* end of include guard: FILESEND_H_HMY0LJA6 */
