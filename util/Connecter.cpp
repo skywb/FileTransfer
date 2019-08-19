@@ -80,7 +80,6 @@ int Connecter::Send(char* buf, int len) {
 Connecter::Type Connecter::Wait(Type type, int time_millsec) {
   epoll_event events[sockets.size() * 2];
   int cnt = epoll_wait(epoll_root_, events, sockets.size()*2, time_millsec);
-
   bool readable = false;
   bool writeable = false;
   for (int i=0; i<cnt; ++i) {

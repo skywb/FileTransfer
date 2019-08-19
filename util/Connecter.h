@@ -23,10 +23,7 @@ public:
 public:
   Connecter (std::string group_ip, int port);
   virtual ~Connecter ();
-  /* 接收消息， 写到缓冲区中， 最大写了长度，
-   * 设置超时退出， 设为-1则阻塞等待
-   */
-  //int Recv(char* buf, int len, int timeout);
+
   /* 等待可读或者可写或者任意一个， 返回可读或者可写的Type
    * time_millsec为超时时间，若在time_millsec 毫秒内没有要等待的类型，则返回kOutTime
    * 若time_millsec 为-1 则阻塞等待

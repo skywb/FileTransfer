@@ -20,17 +20,17 @@ public:
   LostPackageVec (int package_count);
   virtual ~LostPackageVec ();
   //获取丢失包的集合
-  std::vector<int> GetFileLostedPackage();
+  std::vector<int> GetFileLostedPackage(int max_num);
   //添加一个丢失记录
   void AddFileLostedRecord(int package_num);
-  /* 尝试退出子线程, 若没有数据包
-   * 若没有数据包，则退出子线程，并返回true
-   * 否则返回false
-   */
-  //bool ExitListen();
-  //检查是否正在运行
-  void RegestListenCallback(void *func(LostPackageVec& , Connecter& ), Connecter& con) {
-    std::thread th(func, *this, con);
+
+  void NoticeRead() {
+    std::unique_lock<std::mutex> lock(recv_lock_);
+    recv_cond_.notify_one();
+  }
+
+  void RegestListenCallback(void func(LostPackageVec& , Connecter& ), Connecter& con) {
+    std::thread th(func, std::ref(*this), std::ref(con));
     listen_thread_.swap(th);
     std::lock_guard<std::mutex> lock(running_lock_);
     running_ = true;
@@ -65,7 +65,7 @@ bool FileSend(std::string group_ip, int port, std::unique_ptr<File>& file_uptr);
 void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file);
 
 //发送包号为package_number的数据包
-void SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer, int ack_num);
+bool SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer, int ack_num);
 
 //监听接收端丢失的包   --- 线程回调函数
 void ListenLostPackageCallback(LostPackageVec& lost, Connecter& con);

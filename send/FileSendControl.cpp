@@ -46,17 +46,6 @@ FileSendControl::FileSendControl (std::string group_ip, int port) :
 
 FileSendControl::~FileSendControl () { }
 
-/* 通知线程， 每500ms发送一次所有正在发送的文件的信息 */
-static void NoticeCallback() {
-  auto time_clock = std::chrono::system_clock::now();
-  auto ctl = FileSendControl::GetInstances();
-  while (true) {
-    time_clock += std::chrono::milliseconds(500);
-    ctl->SendNoticeToClient();
-    std::this_thread::sleep_until(time_clock);
-  }
-}
-
 /* 开始监听和发送文件, 只能调用一次, 用于运行伴随对象启动的线程 */
 void FileSendControl::Run() {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -65,8 +54,6 @@ void FileSendControl::Run() {
   listen_file_recv_.swap(local_t);
   running_ = true;
   //定时500毫秒发送一次所有正在发送的文件的信息
-  std::thread send_notices_to_client_thread(NoticeCallback);
-  send_notices_to_client_thread.detach();
 }
 
 /* 发送文件， 传入的参数是一个文件地址， 该文件必须时存在的
@@ -232,59 +219,106 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
  * 一个见的记录超过10秒中没有刷新， 则认为该发送端已停止发送， 删除该记录
  */
 void FileSendControl::ListenFileRecvCallback(Connecter& con) {
-  char buf[kBufSize];
-  boost::uuids::uuid file_uuid;
   Proto proto;
+  auto ctl = FileSendControl::GetInstances();
   while (true) {
-    memset(buf, 0, kBufSize);
-    //3秒中超时等待， 如果没有数据什么也不做
-    //可设置为-1 阻塞等待， 为了留下退出运行的接口,设为可超时
-    int cnt = con.Recv(proto.buf(), BUFSIZ, 3000);
-    if (cnt == -1) {
-      continue;
-    } else {
-      /*: 解析组播地址和文件名 <24-07-19, 王彬> */
-      Proto::Type type = proto.type();
-      if (type != Proto::kNewFile) {
+    auto stat = con.Wait(Connecter::kAll, 500);
+    if (stat == Connecter::kOutTime || stat == Connecter::kWrite) {
+      ctl->SendNoticeToClient();
+    }
+    if (stat & Connecter::kRead) {
+      int cnt = con.Recv(proto.buf(), proto.BufSize());
+      if (cnt == -1) {
+        continue;
+      }
+      if (proto.type() != Proto::kNewFile) {
         std::cout << "type != kNewFile" << std::endl;
       }
-      //按照协议格式读取数据
-      uint32_t ip_local = proto.group_ip();
-      int port_recv = proto.port();
-      file_uuid = proto.uuid();
-      int file_len = proto.file_len();
-      std::string file_name = proto.file_name();
       /*: 判断是否已经传输 <30-07-19, 王彬> */
-      auto conse = FileSendControl::GetInstances();
-      if (conse->FileIsRecving(file_uuid)) {   //文件已经接收
+      if (ctl->FileIsRecving(proto.uuid())) {   //文件已经接收
         continue;
       }
       //通知前端
-      std::string file_name_front(file_name);
+      std::string file_name_front(proto.file_name());
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
       auto ctl = FileSendControl::GetInstances();
       std::vector<std::string> msg;
       msg.push_back(file_name_front);
-      ctl->NoticeFront(file_uuid, FileSendControl::kNewFile, msg);
-      auto file = std::make_unique<File> (file_name, file_uuid, file_len, true);
+      ctl->NoticeFront(proto.uuid(), FileSendControl::kNewFile, msg);
+      auto file = std::make_unique<File> (proto.file_name(), proto.uuid(), proto.file_len(), true);
       //保存文件信息
       auto file_notice = std::make_unique<FileNotce>();
       file_notice->clock_ = std::chrono::system_clock::now();
-      file_notice->uuid_ = file_uuid;
+      file_notice->uuid_ = proto.uuid();
       file_notice->file_name_ = file->File_name();
       file_notice->end_ = false;
       ctl->AddRecvingFile(std::move(file_notice));
       //转地址
-      uint32_t ip_net = htonl(ip_local);
-      std::cout << "new file group ip is" << ip_local << std::endl;
+      uint32_t ip_net = htonl(proto.group_ip());
+      std::cout << "new file group ip is" << proto.group_ip() << std::endl;
       in_addr ip_addr;
       memcpy(&ip_addr, &ip_net, sizeof(in_addr));
       std::string ip(inet_ntoa(ip_addr));
       //开启一个新线程接收文件
-      std::thread file_recv_thread(RecvFile, ip, port_recv, std::move(file));
+      std::thread file_recv_thread(RecvFile, ip, proto.port(), std::move(file));
       file_recv_thread.detach();
     }
   }
+
+
+
+  //char buf[kBufSize];
+  //boost::uuids::uuid file_uuid;
+  //while (true) {
+  //  memset(buf, 0, kBufSize);
+  //  //3秒中超时等待， 如果没有数据什么也不做
+  //  //可设置为-1 阻塞等待， 为了留下退出运行的接口,设为可超时
+  //  int cnt = con.Recv(proto.buf(), BUFSIZ);
+  //  if (cnt == -1) {
+  //    continue;
+  //  } else {
+  //    /*: 解析组播地址和文件名 <24-07-19, 王彬> */
+  //    Proto::Type type = proto.type();
+  //    if (type != Proto::kNewFile) {
+  //      std::cout << "type != kNewFile" << std::endl;
+  //    }
+  //    //按照协议格式读取数据
+  //    uint32_t ip_local = proto.group_ip();
+  //    int port_recv = proto.port();
+  //    file_uuid = proto.uuid();
+  //    int file_len = proto.file_len();
+  //    std::string file_name = proto.file_name();
+  //    /*: 判断是否已经传输 <30-07-19, 王彬> */
+  //    auto conse = FileSendControl::GetInstances();
+  //    if (conse->FileIsRecving(file_uuid)) {   //文件已经接收
+  //      continue;
+  //    }
+  //    //通知前端
+  //    std::string file_name_front(file_name);
+  //    file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
+  //    auto ctl = FileSendControl::GetInstances();
+  //    std::vector<std::string> msg;
+  //    msg.push_back(file_name_front);
+  //    ctl->NoticeFront(file_uuid, FileSendControl::kNewFile, msg);
+  //    auto file = std::make_unique<File> (file_name, file_uuid, file_len, true);
+  //    //保存文件信息
+  //    auto file_notice = std::make_unique<FileNotce>();
+  //    file_notice->clock_ = std::chrono::system_clock::now();
+  //    file_notice->uuid_ = file_uuid;
+  //    file_notice->file_name_ = file->File_name();
+  //    file_notice->end_ = false;
+  //    ctl->AddRecvingFile(std::move(file_notice));
+  //    //转地址
+  //    uint32_t ip_net = htonl(ip_local);
+  //    std::cout << "new file group ip is" << ip_local << std::endl;
+  //    in_addr ip_addr;
+  //    memcpy(&ip_addr, &ip_net, sizeof(in_addr));
+  //    std::string ip(inet_ntoa(ip_addr));
+  //    //开启一个新线程接收文件
+  //    std::thread file_recv_thread(RecvFile, ip, port_recv, std::move(file));
+  //    file_recv_thread.detach();
+  //  }
+  //}
 }
 
 /* 向通知组发送自己所有正在发送的文件的信息
