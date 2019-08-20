@@ -3,21 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 
 aux_source_directory(. DIR_SRC)
 
-#add_executable(testFileSend testFileSend.cpp)
-#add_executable(testRecv testRecv.cpp)
-#add_executable(testFileSendControl testFileSendControl.cpp)
-#add_executable(testConnecter testConnecter.cpp)
-#add_executable(testConnecterRecv testConnecterRecv.cpp)
-#add_executable(testglog testglog.cpp)
-#add_executable(testRess testRe.cpp)
-add_executable(testZip testzip.cpp)
+add_executable(LostPackageVec LostPackageVec_test.cpp)
 
-#target_link_libraries(testFileSend send recv util pthread)
-#target_link_libraries(testRecv send recv util pthread)
-#target_link_libraries(testFileSendControl send recv util pthread)
-#target_link_libraries(testConnecter send recv util pthread)
-#target_link_libraries(testConnecterRecv send recv util pthread)
-#target_link_libraries(testRess send recv util pthread)
-#target_link_libraries(testglog pthread glog)
-target_link_libraries(testZip util zip)
+target_link_libraries(LostPackageVec send util zip recv gtest gmock gtest_main pthread)
 
