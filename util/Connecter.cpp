@@ -79,7 +79,23 @@ int Connecter::Send(char* buf, int len) {
 
 Connecter::Type Connecter::Wait(Type type, int time_millsec) {
   epoll_event events[sockets.size() * 2];
-  int cnt = epoll_wait(epoll_root_, events, sockets.size()*2, time_millsec);
+  int cnt = 0;
+  if (type & Connecter::kWrite) {
+    epoll_event event;
+    for (auto i : sockets) {
+      event.data.fd = i;
+      event.events = EPOLLIN | EPOLLOUT;
+      epoll_ctl(epoll_root_, EPOLL_CTL_MOD, i, &event);
+    }
+    cnt = epoll_wait(epoll_root_, events, sockets.size()*2, time_millsec);
+    for (auto i : sockets) {
+      event.data.fd = i;
+      event.events = EPOLLIN;
+      epoll_ctl(epoll_root_, EPOLL_CTL_MOD, i, &event);
+    }
+  } else {
+    cnt = epoll_wait(epoll_root_, events, sockets.size()*2, time_millsec);
+  }
   bool readable = false;
   bool writeable = false;
   for (int i=0; i<cnt; ++i) {
