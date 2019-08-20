@@ -221,13 +221,8 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
 void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   Proto proto;
   auto ctl = FileSendControl::GetInstances();
-  auto pre_time = std::chrono::system_clock::now();
-  auto event = Connecter::kRead;
   while (true) {
-    if (pre_time + std::chrono::milliseconds(500) < std::chrono::system_clock::now()) {
-      event = Connecter::kAll;
-    }
-    auto stat = con.Wait(event, 500);
+    auto stat = con.Wait(Connecter::kAll, 500);
     if (stat == Connecter::kOutTime || stat == Connecter::kWrite) {
       ctl->SendNoticeToClient();
     }
