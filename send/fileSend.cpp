@@ -107,13 +107,12 @@ void ListenLostPackageCallback(LostPackageVec& losts, Connecter& con) {
       if (Proto::kReSend == proto.type()) {
         losts.AddFileLostedRecord(proto.package_numbuer());
       } else if (Proto::kAlive == proto.type()) {
-
+        //保活连接， 更新时间即可
       }
       now = std::chrono::system_clock::now();
     }
     if (!losts.WaitRecvable(now + std::chrono::seconds(3))) {
-      losts.ExecRunning();
-      return;
+      losts.ExitRunning();
     }
   }
 }
@@ -121,34 +120,41 @@ void ListenLostPackageCallback(LostPackageVec& losts, Connecter& con) {
 
 LostPackageVec::LostPackageVec (int package_count) : 
   package_count_(package_count),
-  lost_(package_count_+1, true), running_(false) { }
+  lost_(package_count_+1, true), lost_num_(package_count_+1), running_(false) { }
 
 LostPackageVec::~LostPackageVec () { 
-  listen_thread_.join();
+  if (listen_thread_.joinable()) 
+    listen_thread_.join();
 }
 
 /*
  * 获取丢失的包的集合， 返回一个vector
  */
 std::vector<int> LostPackageVec::GetFileLostedPackage(int max_num) {
-  std::unique_lock<std::mutex> lock(send_lock_);
   std::vector<int> res;
-  send_cond_.wait(lock);
-  for (int i = 0, cnt = 0; i <= package_count_ && cnt < max_num; ++i) {
+  std::unique_lock<std::mutex> lock(lost_pack_lock_);
+  while (lost_num_ <= 0) 
+    lost_pack_cond_.wait(lock);
+  for (int i = 1, cnt = 0; i <= package_count_ && cnt < max_num; ++i) {
     if (lost_[i]) {
       res.push_back(i);
       ++cnt;
       lost_[i] = false;
     } 
   }
+  lost_num_ -= res.size();
+  if (lost_num_ < 0) lost_num_ = 0;
   return res;
 }
 
 //添加一个丢失记录
 void LostPackageVec::AddFileLostedRecord(int package_num) {
-  std::lock_guard<std::mutex> lock(send_lock_);
-  lost_[package_num] = true;
-  send_cond_.notify_one();
+  std::lock_guard<std::mutex> lock(lost_pack_lock_);
+  if (lost_[package_num] == false) {
+    lost_[package_num] = true;
+    ++lost_num_;
+  }
+  lost_pack_cond_.notify_one();
 }
 
 

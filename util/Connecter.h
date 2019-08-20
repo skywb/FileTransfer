@@ -28,11 +28,11 @@ public:
    * time_millsec为超时时间，若在time_millsec 毫秒内没有要等待的类型，则返回kOutTime
    * 若time_millsec 为-1 则阻塞等待
    */
-  Type Wait(Type type, int time_millsec);
+  virtual Type Wait(Type type, int time_millsec);
   //非阻塞读， 没有数据返回-1
-  int Recv(char* buf, int len);
+  virtual int Recv(char* buf, int len);
   /* 非阻塞发送数据, 无法发送的返回-1 */
-  int Send(char* buf, int len);
+  virtual int Send(char* buf, int len);
 private:
   //std::vector<int> sockets;
   std::list<int> sockets;

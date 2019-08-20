@@ -28,7 +28,6 @@ public:
     std::unique_lock<std::mutex> lock(recv_lock_);
     recv_cond_.notify_one();
   }
-
   void RegestListenCallback(void func(LostPackageVec& , Connecter& ), Connecter& con) {
     std::thread th(func, std::ref(*this), std::ref(con));
     listen_thread_.swap(th);
@@ -38,21 +37,21 @@ public:
   bool WaitRecvable(std::chrono::time_point<std::chrono::system_clock> time) {
     std::unique_lock<std::mutex> lock(recv_lock_);
     if (std::cv_status::timeout == recv_cond_.wait_until(lock, time)) return false;
-    return isRunning();
+    return true;
   }
   bool isRunning();
-  void ExecRunning() {
+  void ExitRunning() {
     std::lock_guard<std::mutex> lock(running_lock_);
     running_ = false;
   }
-
 private:
   std::thread listen_thread_;
   int package_count_;    //包数量
   std::vector<bool> lost_;  //丢失记录
-  std::mutex send_lock_;
+  int lost_num_;   //丢失个数
+  std::mutex lost_pack_lock_;
   std::mutex recv_lock_;
-  std::condition_variable send_cond_;   //唤醒正在发送端重发数据包
+  std::condition_variable lost_pack_cond_;   //唤醒正在发送端重发数据包
   std::condition_variable recv_cond_;   //唤醒正在发送端重发数据包
   std::mutex running_lock_;
   bool running_;
