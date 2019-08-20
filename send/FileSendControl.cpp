@@ -225,7 +225,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   auto heart_time = std::chrono::system_clock::now();
   while (true) {
     event = Connecter::kRead;
-    if (heart_time + std::chrono::milliseconds(500) >= std::chrono::system_clock::now()) {
+    if (heart_time + std::chrono::milliseconds(500) <= std::chrono::system_clock::now()) {
       event = Connecter::kAll;
     }
     auto stat = con.Wait(event, 500);
@@ -233,11 +233,13 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       ctl->SendNoticeToClient();
       heart_time = std::chrono::system_clock::now();
     }
+    std::cout << stat << std::endl;
     if (stat & Connecter::kRead) {
       int cnt = con.Recv(proto.buf(), proto.BufSize());
       if (cnt == -1) {
         continue;
       }
+      std::cout << "recv new file" << std::endl;
       if (proto.type() != Proto::kNewFile) {
         std::cout << "type != kNewFile" << std::endl;
       }
