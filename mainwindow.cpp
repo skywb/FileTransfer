@@ -10,8 +10,6 @@
 #include <functional>
 #include <boost/uuid/random_generator.hpp>
 
-
-
 MainWindow::MainWindow(QWidget *parent) :
   QMainWindow(parent),
   ui(new Ui::MainWindow)
