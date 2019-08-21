@@ -32,7 +32,13 @@ Connecter::Connecter (std::string group_ip, int port) {
   }
   delete addr;
   epoll_root_ = epoll_create(10);
-
+  if (-1 == pipe(pipefd_)) {
+    std::cout << "打开管道失败" << std::endl;
+    return;
+  }
+  event_.data.fd = pipefd_[0];
+  event_.events = EPOLLIN;
+  epoll_ctl(epoll_root_, EPOLL_CTL_ADD, pipefd_[0], &event_);
   for (auto i = sockets.cbegin(); i != sockets.cend(); ++i) {
     event_.data.fd = *i;
     event_.events = EPOLLIN;
@@ -51,7 +57,7 @@ Connecter::~Connecter() {
 }
 
 int Connecter::Recv(char* buf, int len) {
-  std::lock_guard<std::mutex> lock_guard(lock_);
+  std::lock_guard<std::mutex> lock_guard(lock_read_);
   sockaddr_in addr;
   socklen_t addr_len = sizeof(addr);
   if (sockets.size() <= 0) return -1;
@@ -65,7 +71,7 @@ int Connecter::Recv(char* buf, int len) {
 }
 
 int Connecter::Send(char* buf, int len) {
-  std::lock_guard<std::mutex> lock_guard(lock_);
+  std::lock_guard<std::mutex> lock_guard(lock_write_);
   int cnt = 0;
   for (auto i : sockets) {
     int re = sendto(i, buf, len, 0, (sockaddr*)&addr_, sizeof(sockaddr_in));
@@ -78,32 +84,56 @@ int Connecter::Send(char* buf, int len) {
 }
 
 Connecter::Type Connecter::Wait(Type type, int time_millsec) {
-  epoll_event events[sockets.size() * 2];
+  epoll_event events[sockets.size() * 2+1];
   int cnt = 0;
-  if (type & Connecter::kWrite) {
-    epoll_event event;
-    for (auto i : sockets) {
-      event.data.fd = i;
-      event.events = EPOLLIN | EPOLLOUT;
-      epoll_ctl(epoll_root_, EPOLL_CTL_MOD, i, &event);
-    }
-    cnt = epoll_wait(epoll_root_, events, sockets.size()*2, time_millsec);
-    for (auto i : sockets) {
-      event.data.fd = i;
-      event.events = EPOLLIN;
-      epoll_ctl(epoll_root_, EPOLL_CTL_MOD, i, &event);
-    }
-  } else {
-    cnt = epoll_wait(epoll_root_, events, sockets.size()*2, time_millsec);
-  }
   bool readable = false;
   bool writeable = false;
-  for (int i=0; i<cnt; ++i) {
-    if (events[i].events == EPOLLOUT) writeable = true;
-    else if (events[i].events == EPOLLIN) readable = true;
+  while (true) {
+    cnt = epoll_wait(epoll_root_, events, sockets.size()*2+1, time_millsec);
+    if (cnt > 0) {
+      for (int i=0; i<cnt; ++i) {
+        if (events[i].data.fd == pipefd_[0]) {
+          //需要监听可写事件
+          char buf[10];
+          int re = 1;
+          while (re > 0) re = read(pipefd_[0], buf, 10);
+          epoll_event event;
+          for (auto i : sockets) {
+            event.data.fd = i;
+            event.events = EPOLLIN | EPOLLOUT;
+            epoll_ctl(epoll_root_, EPOLL_CTL_MOD, i, &event);
+          }
+          continue;
+        } 
+        if (events[i].events & EPOLLOUT) {
+          writeable = true;
+        } 
+        if (events[i].events & EPOLLIN) {
+          readable = true;
+        }
+      }
+    } else {
+      return Connecter::kOutTime;
+    }
   }
   if (readable && writeable) return kAll;
   else if (readable) return kRead;
   else if (writeable) return kWrite;
   return kOutTime;
+}
+
+
+
+bool Connecter::WaitReadable() {
+ // write(pipefd_[1], "1", 1);
+ // std::unique_lock<std::mutex> lock(lock_read_);
+ // cond_read_.wait(lock);
+  return true;
+}
+bool Connecter::WaitWriteable() {
+  write(pipefd_[1], "1", 1);
+  std::unique_lock<std::mutex> lock(lock_write_);
+  cond_write_.wait(lock);
+  return true;
+
 }
