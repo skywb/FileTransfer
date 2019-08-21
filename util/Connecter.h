@@ -33,6 +33,9 @@ public:
   virtual int Recv(char* buf, int len);
   /* 非阻塞发送数据, 无法发送的返回-1 */
   virtual int Send(char* buf, int len);
+  operator bool() {
+    return true;
+  }
 private:
   //std::vector<int> sockets;
   std::list<int> sockets;
