@@ -16,6 +16,8 @@
 #include <vector>
 #include <thread>
 
+#include <glog/logging.h>
+
 static bool RequeseResendPackage(int package_num, Connecter& con) {
   Proto request;
   request.set_type(Proto::kReSend);
@@ -34,8 +36,14 @@ static bool RequeseResendPackage(int package_num, Connecter& con) {
  */
 bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) {
   Connecter con(group_ip, port);
+  if (!con) {
+    return false;
+  }
+  LOG(INFO) << "加入组播 ip:" << group_ip << " port : " << port << "成功\n"
+    << "开始发送文件数据, 文件名：" <<  file_uptr->File_name() 
+    << " max package num " << file_uptr->File_max_packages();
   //上次更新心跳包的时间
-  auto time_alive_pre = std::chrono::system_clock::now();
+  auto heart_pre = std::chrono::system_clock::now();
   auto time_pack_pre = std::chrono::system_clock::now();
   //检查的包序号
   int request_pack_num = 1, check_package_num = 1, max_ack = 0;
@@ -46,11 +54,12 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       Proto::Type type = proto.type();
       //非数据包
       if (type == Proto::kAlive || type == Proto::kReSend) {
-        time_alive_pre = std::chrono::system_clock::now();
+        heart_pre = std::chrono::system_clock::now();
+        LOG_EVERY_N(INFO, 100) << "收到100次心跳包";
       } else if (type == Proto::kData) {
         int pack_num = proto.package_numbuer();/*{{{*/
         if (pack_num == 0) {
-          std::cout << "pack_num = 0" << std::endl;
+          LOG(DEBUG) << "recv pack_num = 0 in FileRecv";
           continue;
         }
         //数据包到来， 更新上次到来时间
@@ -61,27 +70,30 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
         while (check_package_num <= file_uptr->File_max_packages() 
             && file_uptr->Check_at_package_number(check_package_num)) {
           ++check_package_num;
-        }/*}}}*/
+        }
+        LOG(INFO) << "recv package " << pack_num << " current check_num is " << check_package_num;
+        /*}}}*/
       } else {
-        //std::cout << "非法type value is " << type  << std::endl;
+        LOG(ERROR) << "类型异常 值：" << type << std::endl;
       }
       /*}}}*/
     } else {
       do {/*{{{*/
-        bool requested = false;
-        for (int i=0; i < 300; ) {
+        int request_cnt = 0;
+        for (request_cnt=0; request_cnt < 300; ) {
           if (request_pack_num > file_uptr->File_max_packages())
             request_pack_num = check_package_num;
           if (!file_uptr->Check_at_package_number(request_pack_num)) {
             if(!RequeseResendPackage(request_pack_num, con)) break;
-            requested = true;
-            ++i;
+            ++request_cnt;
           }
         }
-        if (requested) {
-          time_alive_pre = std::chrono::system_clock::now();
+        if (request_cnt > 0) {
+          heart_pre = std::chrono::system_clock::now();
+          LOG(INFO) << "请求重传， count = " << request_cnt;
           break;
         } else {
+          LOG(INFO) << "等待可读可写事件";
           auto con_type = con.Wait(Connecter::kAll, 500);
           if (con_type & Connecter::kRead) break;
           else if (con_type == Connecter::kOutTime 
@@ -93,15 +105,20 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
     }
     auto now = std::chrono::system_clock::now();
     //超时没有心跳包到达
-    if (time_pack_pre + std::chrono::milliseconds(500) <= now) {
+    if (heart_pre + std::chrono::milliseconds(500) <= now) {
+      LOG(INFO) << "超时没有心跳包，发送一次心跳包";
+      proto.set_type(Proto::kAlive);
+      con.Send(proto.buf(), proto.get_send_len());
+      heart_pre = std::chrono::system_clock::now();
       break;
     }
     //超时没有数据包到达， 可能发送端已经断开连接
     if (time_pack_pre + std::chrono::seconds(3) <= now) {
+      LOG(INFO) << "超时没有数据包，退出接收";
       break;
     }
   }
-  //std::cout << check_package_num << " " << file_uptr->File_max_packages() << std::endl;
+  LOG(INFO) << "接收结束， check_package_num = " << check_package_num << " file pack sum is : " << file_uptr->File_max_packages();
   return check_package_num > file_uptr->File_max_packages();
 }
 
