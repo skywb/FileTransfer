@@ -26,22 +26,7 @@ static bool RequeseResendPackage(int package_num, Connecter& con) {
   return (-1 != con.Send(request.buf(), request.get_send_len()));
 }
 
-/* 加入指定的组播地址和端口， 接收一个文件，file_uptr必须为已经打开的状态
- * 创建一个连接到该组播地址的Connecter
- * 接收到数据包之后进行检查数据包，如果该包已经接收过则丢弃，否则写入文件
- * 检查：
- *    当500ms没有数据到来时，可能发送端已经发送完或者断开连接的状态， 则检查
- *    本地文件的接收状态，发送确实的包序号，等待发送端重发
- *TODO: 判断断开连接的状态，重连
- */
-bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) {
-  Connecter con(group_ip, port);
-  if (!con) {
-    return false;
-  }
-  LOG(INFO) << "加入组播 ip:" << group_ip << " port : " << port << "成功\n"
-    << "开始发送文件数据, 文件名：" <<  file_uptr->File_name() 
-    << " max package num " << file_uptr->File_max_packages();
+static bool RecvDataWriteToFile(Connecter& con, std::unique_ptr<File>& file_uptr) {
   //上次更新心跳包的时间
   auto heart_pre = std::chrono::system_clock::now();
   auto time_pack_pre = std::chrono::system_clock::now();
@@ -50,7 +35,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   Proto proto;
   while (true) {
     if (-1 != con.Recv(proto.buf(), proto.BufSize())) {
-      /*{{{*/
+      /* 接受到数据 {{{*/
       Proto::Type type = proto.type();
       //非数据包
       if (type == Proto::kAlive || type == Proto::kReSend) {
@@ -59,7 +44,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       } else if (type == Proto::kData) {
         int pack_num = proto.package_numbuer();/*{{{*/
         if (pack_num == 0) {
-          LOG(DEBUG) << "recv pack_num = 0 in FileRecv";
+          LOG(ERROR) << "recv pack_num = 0 in FileRecv";
           continue;
         }
         //数据包到来， 更新上次到来时间
@@ -78,7 +63,7 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
       }
       /*}}}*/
     } else {
-      do {/*{{{*/
+      do {/* 没有收到数据， 则请求重传{{{*/
         int request_cnt = 0;
         for (request_cnt=0; request_cnt < 300; ) {
           if (request_pack_num > file_uptr->File_max_packages())
@@ -120,5 +105,24 @@ bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) 
   }
   LOG(INFO) << "接收结束， check_package_num = " << check_package_num << " file pack sum is : " << file_uptr->File_max_packages();
   return check_package_num > file_uptr->File_max_packages();
+}
+
+/* 加入指定的组播地址和端口， 接收一个文件，file_uptr必须为已经打开的状态
+ * 创建一个连接到该组播地址的Connecter
+ * 接收到数据包之后进行检查数据包，如果该包已经接收过则丢弃，否则写入文件
+ * 检查：
+ *    当500ms没有数据到来时，可能发送端已经发送完或者断开连接的状态， 则检查
+ *    本地文件的接收状态，发送确实的包序号，等待发送端重发
+ *TODO: 判断断开连接的状态，重连
+ */
+bool FileRecv(std::string group_ip, int port, std::unique_ptr<File>& file_uptr) {
+  Connecter con(group_ip, port);
+  if (!con) {
+    return false;
+  }
+  LOG(INFO) << "加入组播 ip:" << group_ip << " port : " << port << "成功\n"
+    << "开始发送文件数据, 文件名：" <<  file_uptr->File_name() 
+    << " max package num " << file_uptr->File_max_packages();
+  return RecvDataWriteToFile(con, file_uptr);
 }
 

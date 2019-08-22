@@ -221,25 +221,23 @@ void FileSendControl::RecvFile(std::string group_ip, int port, std::unique_ptr<F
 void FileSendControl::ListenFileRecvCallback(Connecter& con) {
   Proto proto;
   auto ctl = FileSendControl::GetInstances();
-  Connecter::Type event;
   auto heart_time = std::chrono::system_clock::now();
   while (true) {
-    event = Connecter::kRead;
     if (heart_time + std::chrono::milliseconds(500) <= std::chrono::system_clock::now()) {
-      event = Connecter::kAll;
+      //发送一次通知
+      if (ctl->SendNoticeToClient()) 
+        heart_time = std::chrono::system_clock::now();
     }
-    auto stat = con.Wait(event, 500);
+    auto stat = con.Wait(Connecter::kAll, 500);
     if (stat == Connecter::kOutTime || stat == Connecter::kWrite) {
-      ctl->SendNoticeToClient();
-      heart_time = std::chrono::system_clock::now();
+      if (ctl->SendNoticeToClient()) 
+        heart_time = std::chrono::system_clock::now();
     }
-    std::cout << stat << std::endl;
     if (stat & Connecter::kRead) {
       int cnt = con.Recv(proto.buf(), proto.BufSize());
       if (cnt == -1) {
         continue;
       }
-      std::cout << "recv new file" << std::endl;
       if (proto.type() != Proto::kNewFile) {
         std::cout << "type != kNewFile" << std::endl;
       }
@@ -247,6 +245,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       if (ctl->FileIsRecving(proto.uuid())) {   //文件已经接收
         continue;
       }
+      std::cout << "recv new file" << std::endl;
       //通知前端
       std::string file_name_front(proto.file_name());
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
@@ -278,17 +277,22 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
 /* 向通知组发送自己所有正在发送的文件的信息
  * 检查所有已失效的uuid， 并删除
  */
-void FileSendControl::SendNoticeToClient() {
+bool FileSendControl::SendNoticeToClient() {
   std::lock_guard<std::mutex> lock(mutex_);
+  bool res = false;
   for (auto& i : file_is_sending_) {
-    con.Send(i->buf_, i->len_);
+    if (-1 != con.Send(i->buf_, i->len_) ) {
+      res = true;
+    }
   }
+  if (!res) con.AddListenWriteableEvent();
   for (auto it = file_is_recving_.begin(); it != file_is_recving_.end(); ++it) {
     if (std::chrono::system_clock::now() - (*it)->clock_ > std::chrono::seconds(10)) {
       it->release();
       it = file_is_recving_.erase(it);
     }
   }
+  return res;
 }
 
 //调用通知前端的回调函数

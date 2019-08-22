@@ -13,6 +13,7 @@ static void SetNoBlock(int sockfd) {
 }
 
 Connecter::Connecter (std::string group_ip, int port) {
+  writeable_ = false;
   addr_.sin_addr.s_addr = inet_addr(group_ip.c_str());
   addr_.sin_family = AF_INET;
   addr_.sin_port = htons(port);
@@ -47,6 +48,7 @@ Connecter::Connecter (std::string group_ip, int port) {
     epoll_ctl(epoll_root_, EPOLL_CTL_ADD, *i, &event_);
   }
   sockfd_iter = sockets.cbegin();
+  writeable_ = true;
 }
 
 Connecter::~Connecter() {
@@ -107,7 +109,14 @@ Connecter::Type Connecter::Wait(Type type, int time_millsec) {
         } 
         if (events[i].events & EPOLLOUT) {
           writeable = true;
-        } 
+          writeable_ = true;
+          epoll_event event;
+          for (auto i : sockets) {
+            event.data.fd = i;
+            event.events = EPOLLIN;
+            epoll_ctl(epoll_root_, EPOLL_CTL_MOD, i, &event);
+          }
+        }
         if (events[i].events & EPOLLIN) {
           readable = true;
         }
@@ -124,16 +133,9 @@ Connecter::Type Connecter::Wait(Type type, int time_millsec) {
 
 
 
-bool Connecter::WaitReadable() {
- // write(pipefd_[1], "1", 1);
- // std::unique_lock<std::mutex> lock(lock_read_);
- // cond_read_.wait(lock);
-  return true;
-}
-bool Connecter::WaitWriteable() {
+bool Connecter::AddListenWriteableEvent() {
+  std::lock_guard<std::mutex> lock(lock_write_);
+  writeable_ = false;
   write(pipefd_[1], "1", 1);
-  std::unique_lock<std::mutex> lock(lock_write_);
-  cond_write_.wait(lock);
   return true;
-
 }

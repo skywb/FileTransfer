@@ -24,35 +24,36 @@ public:
   //添加一个丢失记录
   void AddFileLostedRecord(int package_num);
 
-  void NoticeRead() {
-    std::unique_lock<std::mutex> lock(recv_lock_);
-    recv_cond_.notify_one();
-  }
-  void RegestListenCallback(void func(LostPackageVec& , Connecter& ), Connecter& con) {
-    std::thread th(func, std::ref(*this), std::ref(con));
-    listen_thread_.swap(th);
-    std::lock_guard<std::mutex> lock(running_lock_);
-    running_ = true;
-  }
-  bool WaitRecvable(std::chrono::time_point<std::chrono::system_clock> time) {
-    std::unique_lock<std::mutex> lock(recv_lock_);
-    if (std::cv_status::timeout == recv_cond_.wait_until(lock, time)) return false;
-    return true;
-  }
+  //void NoticeRead() {
+  //  std::unique_lock<std::mutex> lock(recv_lock_);
+  //  recv_cond_.notify_one();
+  //}
+  //void RegestListenCallback(void func(LostPackageVec& , Connecter& ), Connecter& con) {
+  //  std::thread th(func, std::ref(*this), std::ref(con));
+  //  listen_thread_.swap(th);
+  //  std::lock_guard<std::mutex> lock(running_lock_);
+  //  running_ = true;
+  //}
+  //bool WaitRecvable(std::chrono::time_point<std::chrono::system_clock> time) {
+  //  std::unique_lock<std::mutex> lock(recv_lock_);
+  //  if (std::cv_status::timeout == recv_cond_.wait_until(lock, time)) return false;
+  //  return true;
+  //}
   bool isRunning();
   void ExitRunning() {
     std::lock_guard<std::mutex> lock(running_lock_);
     running_ = false;
   }
 private:
-  std::thread listen_thread_;
+  //std::thread listen_thread_;
   int package_count_;    //包数量
   std::vector<bool> lost_;  //丢失记录
   int lost_num_;   //丢失个数
+  int send_pack_beg_;
   std::mutex lost_pack_lock_;
-  std::mutex recv_lock_;
+  //std::mutex recv_lock_;
   std::condition_variable lost_pack_cond_;   //唤醒正在发送端重发数据包
-  std::condition_variable recv_cond_;   //唤醒正在发送端重发数据包
+  //std::condition_variable recv_cond_;   //唤醒正在发送端重发数据包
   std::mutex running_lock_;
   bool running_;
 };

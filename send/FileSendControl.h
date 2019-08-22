@@ -118,7 +118,7 @@ public:
   /* 通知客户端接收该文件
    * 通知发送一次， 发送所有正在发送的文件头信息
    * 同时检查所有失效的uuid */
-  void SendNoticeToClient();
+  bool SendNoticeToClient();
   /* 开始运行， 创建该对象后需要调用run才会接收和发送文件*/
   void Run();
   /* 发送文件结束， 处理相关的资源和通知 */
