@@ -54,7 +54,7 @@ static void ListenLostPackage(Connecter& con, LostPackageVec& lost) {
   while (true) {
     auto event = con.Wait(Connecter::kRead, 3000);
     if (event == Connecter::kOutTime) {
-      if (heart_time + std::chrono::milliseconds(3) < std::chrono::system_clock::now()) {
+      if (heart_time + std::chrono::seconds(3) < std::chrono::system_clock::now()) {
         lost.ExitRunning();
         LOG(INFO) << "超时没有心跳包，退出发送程序";
         break;
@@ -73,6 +73,7 @@ static void ListenLostPackage(Connecter& con, LostPackageVec& lost) {
           lost.AddFileLostedRecord(proto.package_numbuer());
           //不需要break; 因为kReSend也是心跳包， 也需要执行kAlive的代码
         case Proto::kAlive:
+          //std::cout << "update heart" << std::endl;
           heart_time = std::chrono::system_clock::now();
           break;
         default:
@@ -177,6 +178,7 @@ void LostPackageVec::AddFileLostedRecord(int package_num) {
     lost_pack_cond_.notify_one();
     return;
   }
+  LOG_EVERY_N(INFO, 300) << "300th recv request resend " << package_num;
   if (lost_[package_num] == false) {
     lost_[package_num] = true;
     ++lost_num_;

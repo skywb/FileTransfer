@@ -227,7 +227,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       if (ctl->SendNoticeToClient()) 
         heart_time = std::chrono::system_clock::now();
     }
-    auto stat = con.Wait(Connecter::kAll, 500);
+    auto stat = con.Wait(Connecter::kRead, 500);
     //std::cout << "wait return " << stat << std::endl;
     if (stat == Connecter::kOutTime || stat == Connecter::kWrite) {
       if (ctl->SendNoticeToClient()) 

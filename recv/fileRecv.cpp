@@ -58,7 +58,7 @@ static bool RecvDataWriteToFile(Connecter& con, std::unique_ptr<File>& file_uptr
         if (check_package_num > file_uptr->File_max_packages()) {
             break;
         }
-        LOG(INFO) << "recv package " << pack_num << " current check_num is " << check_package_num;
+        LOG_EVERY_N(INFO, 300) << "300th recv package " << pack_num << " current check_num is " << check_package_num;
         /*}}}*/
       } else {
         LOG(ERROR) << "类型异常 值：" << type << std::endl;
@@ -80,11 +80,17 @@ static bool RecvDataWriteToFile(Connecter& con, std::unique_ptr<File>& file_uptr
           LOG(INFO) << "请求重传， count = " << request_cnt;
           break;
         } else {
-          LOG(INFO) << "等待可读可写事件";
-          con.AddListenWriteableEvent();
+          LOG_EVERY_N(INFO, 100) << "等待可读可写事件 100th";
+          //con.AddListenWriteableEvent();
           auto con_type = con.Wait(Connecter::kAll, 500);
-          if (con_type & Connecter::kWrite) continue;
-          if (con_type & Connecter::kRead) break;
+          if (con_type == Connecter::kWrite || con_type == Connecter::kAll) {
+
+              continue;
+          }
+          if (con_type == Connecter::kRead || con_type == Connecter::kAll) {
+
+              break;
+          }
           if (con_type == Connecter::kOutTime
               && time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
               break;
