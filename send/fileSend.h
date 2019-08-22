@@ -43,6 +43,7 @@ public:
   void ExitRunning() {
     std::lock_guard<std::mutex> lock(running_lock_);
     running_ = false;
+    lost_pack_cond_.notify_all();
   }
 private:
   //std::thread listen_thread_;

@@ -37,6 +37,8 @@ Connecter::Connecter (std::string group_ip, int port) {
     std::cout << "打开管道失败" << std::endl;
     return;
   }
+  SetNoBlock(pipefd_[0]);
+  SetNoBlock(pipefd_[1]);
   event_.data.fd = pipefd_[0];
   event_.events = EPOLLIN;
   epoll_ctl(epoll_root_, EPOLL_CTL_ADD, pipefd_[0], &event_);
@@ -90,7 +92,6 @@ Connecter::Type Connecter::Wait(Type type, int time_millsec) {
   int cnt = 0;
   bool readable = false;
   bool writeable = false;
-  while (true) {
     cnt = epoll_wait(epoll_root_, events, sockets.size()*2+1, time_millsec);
     if (cnt > 0) {
       for (int i=0; i<cnt; ++i) {
@@ -121,9 +122,7 @@ Connecter::Type Connecter::Wait(Type type, int time_millsec) {
           readable = true;
         }
       }
-    } else {
-      return Connecter::kOutTime;
-    }
+
   }
   if (readable && writeable) return kAll;
   else if (readable) return kRead;

@@ -75,7 +75,6 @@ void FileSendControl::SendFile(std::string file_path) {
       /* TODO: 文件发送过快时将任务加入队列 <12-08-19, 王彬> */
       return ;
     }
-    std::cout << ip_local-kMulticastIpMin << std::endl;
     ip_used_[ip_local-kMulticastIpMin] = true;
   }
   //通知前端时附带的信息
@@ -145,7 +144,7 @@ void FileSendControl::Sendend(std::unique_ptr<File> file, uint32_t group_ip_loca
 
 void FileSendControl::Recvend(std::unique_ptr<File> file) {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (file->Stat())
+  if (file->Stat() == File::kRecvend)
     std::string file_name = Unzip(file->File_name(), "./");
   //删除已经存在的文件
   std::string cmd = "rm -f ";
@@ -229,6 +228,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
         heart_time = std::chrono::system_clock::now();
     }
     auto stat = con.Wait(Connecter::kAll, 500);
+    //std::cout << "wait return " << stat << std::endl;
     if (stat == Connecter::kOutTime || stat == Connecter::kWrite) {
       if (ctl->SendNoticeToClient()) 
         heart_time = std::chrono::system_clock::now();
@@ -245,7 +245,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       if (ctl->FileIsRecving(proto.uuid())) {   //文件已经接收
         continue;
       }
-      std::cout << "recv new file" << std::endl;
+      //std::cout << "recv new file" << std::endl;
       //通知前端
       std::string file_name_front(proto.file_name());
       file_name_front = file_name_front.substr(0, file_name_front.rfind('.'));
@@ -263,7 +263,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
       ctl->AddRecvingFile(std::move(file_notice));
       //转地址
       uint32_t ip_net = htonl(proto.group_ip());
-      std::cout << "new file group ip is" << proto.group_ip() << std::endl;
+      //std::cout << "new file group ip is" << proto.group_ip() << std::endl;
       in_addr ip_addr;
       memcpy(&ip_addr, &ip_net, sizeof(in_addr));
       std::string ip(inet_ntoa(ip_addr));
@@ -280,6 +280,7 @@ void FileSendControl::ListenFileRecvCallback(Connecter& con) {
 bool FileSendControl::SendNoticeToClient() {
   std::lock_guard<std::mutex> lock(mutex_);
   bool res = false;
+  if (file_is_sending_.empty()) res = true;
   for (auto& i : file_is_sending_) {
     if (-1 != con.Send(i->buf_, i->len_) ) {
       res = true;

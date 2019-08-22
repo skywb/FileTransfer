@@ -39,7 +39,7 @@ static void ListenLostPackage(Connecter& con, LostPackageVec& lost) {
     auto event = con.Wait(Connecter::kRead, 3000);
     if (event == Connecter::kOutTime) {
       if (heart_time + std::chrono::milliseconds(3) < std::chrono::system_clock::now()) {
-        lost.ExitRunning();
+          lost.ExitRunning();
         return;
       }
     }
@@ -102,7 +102,7 @@ bool FileSend(std::string group_ip,
  * 若包号大于0， 则计算数据在文件的相应位置，并发送
  */
 bool SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer, int ack_num) {
-  if (package_numbuer > ack_num) ack_num = package_numbuer;
+    if (package_numbuer > ack_num) ack_num = package_numbuer;
   if (package_numbuer == 0) {
     //SendFileMessage(con, file); 
     return false;
@@ -157,8 +157,8 @@ bool SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
 
 LostPackageVec::LostPackageVec (int package_count) : 
   package_count_(package_count),
-  lost_(package_count_+1, true), lost_num_(package_count_+1),
-  send_pack_beg_(1), running_(false) { }
+  lost_(package_count_+1, true), lost_num_(package_count_),
+  send_pack_beg_(1), running_(true) { }
 
 LostPackageVec::~LostPackageVec () { 
   //if (listen_thread_.joinable()) 
@@ -172,11 +172,13 @@ std::vector<int> LostPackageVec::GetFileLostedPackage(int max_num) {
   std::vector<int> res;
   if (!isRunning()) return res;
   std::unique_lock<std::mutex> lock(lost_pack_lock_);
-  while (lost_num_ <= 0) 
+  while(isRunning() && lost_num_ <= 0) {
     lost_pack_cond_.wait(lock);
+
+  }
   max_num = std::min(max_num, package_count_);
-  for (int cnt = 0; cnt < max_num; ++send_pack_beg_) {
-    if (send_pack_beg_ > package_count_) send_pack_beg_ = 1;
+  if (send_pack_beg_ > package_count_) send_pack_beg_ = 1;
+  for (int cnt=0; send_pack_beg_ <= package_count_ && cnt < max_num; ++send_pack_beg_) {
     if (lost_[send_pack_beg_]) {
       res.push_back(send_pack_beg_);
       ++cnt;

@@ -22,7 +22,6 @@ static bool RequeseResendPackage(int package_num, Connecter& con) {
   Proto request;
   request.set_type(Proto::kReSend);
   request.set_package_number(package_num);
-  //std::cout << "request " << package_num << std::endl;
   return (-1 != con.Send(request.buf(), request.get_send_len()));
 }
 
@@ -56,6 +55,9 @@ static bool RecvDataWriteToFile(Connecter& con, std::unique_ptr<File>& file_uptr
             && file_uptr->Check_at_package_number(check_package_num)) {
           ++check_package_num;
         }
+        if (check_package_num > file_uptr->File_max_packages()) {
+            break;
+        }
         LOG(INFO) << "recv package " << pack_num << " current check_num is " << check_package_num;
         /*}}}*/
       } else {
@@ -65,7 +67,7 @@ static bool RecvDataWriteToFile(Connecter& con, std::unique_ptr<File>& file_uptr
     } else {
       do {/* 没有收到数据， 则请求重传{{{*/
         int request_cnt = 0;
-        for (request_cnt=0; request_cnt < 300; ) {
+        for (request_cnt=0; request_cnt < 300; ++request_pack_num) {
           if (request_pack_num > file_uptr->File_max_packages())
             request_pack_num = check_package_num;
           if (!file_uptr->Check_at_package_number(request_pack_num)) {
@@ -83,7 +85,7 @@ static bool RecvDataWriteToFile(Connecter& con, std::unique_ptr<File>& file_uptr
           if (con_type & Connecter::kRead) break;
           else if (con_type == Connecter::kOutTime 
               && time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
-              return false;
+              break;
           }
         }
       } while (true);/*}}}*/
