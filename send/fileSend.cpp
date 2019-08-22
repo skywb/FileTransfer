@@ -94,7 +94,8 @@ bool FileSend(std::string group_ip,
     int port, std::unique_ptr<File>& file_uptr) {
   Connecter con(group_ip, port);
   LostPackageVec losts(file_uptr->File_max_packages());
-  std::thread send_data_th(SendFileDataCallback, std::ref(con), std::ref(losts), std::ref(file_uptr));
+  std::thread send_data_th(SendFileDataCallback, 
+      std::ref(con), std::ref(losts), std::ref(file_uptr));
   ListenLostPackage(con, losts);
   send_data_th.join();
   return file_uptr->Stat() == File::kSendend;
@@ -105,8 +106,10 @@ bool FileSend(std::string group_ip,
  * 若为0号包， 则为文件信息
  * 若包号大于0， 则计算数据在文件的相应位置，并发送
  */
-bool SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, int package_numbuer, int ack_num) {
-    if (package_numbuer > ack_num) ack_num = package_numbuer;
+bool SendFileDataAtPackNum(Connecter& con, 
+    const std::unique_ptr<File>& file,
+    int package_numbuer, int ack_num) {
+  if (package_numbuer > ack_num) ack_num = package_numbuer;
   if (package_numbuer == 0) {
     //SendFileMessage(con, file); 
     return false;
@@ -118,7 +121,8 @@ bool SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
     proto.set_file_name(file->File_name());
     int re = file->Read(package_numbuer, proto.get_file_data_buf_ptr());
     if (re < 0) {
-      std::cout << "read len < 0" << __FILE__ << __LINE__ << std::endl;
+      LOG(ERROR) << "读文件失败" <<  __FILE__ << __LINE__;
+      return false;
     }
     proto.set_file_data_len(re);
     //std::cout << "send pack " << proto.package_numbuer() << std::endl;
