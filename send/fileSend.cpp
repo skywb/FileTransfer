@@ -13,8 +13,16 @@
 #include <chrono>
 #include <glog/logging.h>
 
-
-void SendFileDataCallback(Connecter& con, LostPackageVec& lost, std::unique_ptr<File>& file_uptr) {
+/*
+ * 发送文件数据的回调函数
+ * 参数：
+ *  con: 连接器，用于连接一个组播组
+ *  lost: 丢包记录
+ *  file_uptr: 文件类指针，用于操作文件
+ * 从lost中获取需要重发的数据包号， 并发送
+ * 根据文件接收状态设置File的stat
+ */
+static void SendFileDataCallback(Connecter& con, LostPackageVec& lost, std::unique_ptr<File>& file_uptr) {
   int max_send_pack = 1;
   while (lost.isRunning()) {
     auto res = lost.GetFileLostedPackage(1000);
@@ -32,6 +40,14 @@ void SendFileDataCallback(Connecter& con, LostPackageVec& lost, std::unique_ptr<
     file_uptr->set_Stat(File::kClientExec);
 }
 
+/*
+ * 监听需要重传的请求
+ *  con: 连接器，用于连接一个组播组
+ *  lost: 丢包记录
+ * 将接收到的重传请求记录到lost中，并发送通知，唤醒重传的线程
+ * 当超时3秒中没有收到心跳包（重传请求也认为是心跳包）则认为接收端已经退出
+ * 并返回
+ */
 static void ListenLostPackage(Connecter& con, LostPackageVec& lost) {
   auto heart_time = std::chrono::system_clock::now();
   Proto proto;
@@ -84,18 +100,6 @@ bool FileSend(std::string group_ip,
   return file_uptr->Stat() == File::kSendend;
 }
 
-////计算文件的长度， 想多播组发送包号为0的数据包
-////数据包格式： 包号（4Bytes)文件名长度(4Bytes)文件名(小于100Bytes)
-//void SendFileMessage(Connecter& con, const std::unique_ptr<File>& file) {
-//  //发送文件信息
-//  Proto proto;
-//  proto.set_type(Proto::kNewFile);
-//  proto.set_package_number(0);
-//  proto.set_file_name(file->File_name());
-//  proto.set_file_len(file->File_len());
-//  con.Send(proto.buf(), proto.get_send_len());
-//}
-
 /*
  * 发送一个数据包给对应的组播地址
  * 若为0号包， 则为文件信息
@@ -127,42 +131,12 @@ bool SendFileDataAtPackNum(Connecter& con, const std::unique_ptr<File>& file, in
   return true;
 }
 
-/* 监听丢失的包
- * 保存到LostPackageVec中
- * 线程任务
- */
-//void ListenLostPackageCallback(LostPackageVec& losts, Connecter& con) {
-///* TODO: 从con中读取数据，
-// * 若为重传请求
-// *  将包号保存到lostvec中， 并唤醒发送线程 send_cond_.notify_one
-// * 若为心跳包， 更新心跳包时间 
-// * 不可读直接再次等待条件变量 recv_cond_<17-08-19, yourname> */
-//  Proto proto;
-//  auto now = std::chrono::system_clock::now();
-//  while (losts.isRunning()) {
-//    while (-1 != con.Recv(proto.buf(), proto.BufSize())) {
-//      if (Proto::kReSend == proto.type()) {
-//        losts.AddFileLostedRecord(proto.package_numbuer());
-//      } else if (Proto::kAlive == proto.type()) {
-//        //保活连接， 更新时间即可
-//      }
-//      now = std::chrono::system_clock::now();
-//    }
-//    if (!losts.WaitRecvable(now + std::chrono::seconds(3))) {
-//      losts.ExitRunning();
-//    }
-//  }
-//}
-
-
 LostPackageVec::LostPackageVec (int package_count) : 
   package_count_(package_count),
   lost_(package_count_+1, true), lost_num_(package_count_),
   send_pack_beg_(1), running_(true) { }
 
 LostPackageVec::~LostPackageVec () { 
-  //if (listen_thread_.joinable()) 
-  //  listen_thread_.join();
 }
 
 /*
