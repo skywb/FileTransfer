@@ -55,8 +55,9 @@ static void ListenLostPackage(Connecter& con, LostPackageVec& lost) {
     auto event = con.Wait(Connecter::kRead, 3000);
     if (event == Connecter::kOutTime) {
       if (heart_time + std::chrono::milliseconds(3) < std::chrono::system_clock::now()) {
-          lost.ExitRunning();
-        return;
+        lost.ExitRunning();
+        LOG(INFO) << "超时没有心跳包，退出发送程序";
+        break;
       }
     }
     if (event & Connecter::kWrite) {

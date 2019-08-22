@@ -81,9 +81,11 @@ static bool RecvDataWriteToFile(Connecter& con, std::unique_ptr<File>& file_uptr
           break;
         } else {
           LOG(INFO) << "等待可读可写事件";
+          con.AddListenWriteableEvent();
           auto con_type = con.Wait(Connecter::kAll, 500);
+          if (con_type & Connecter::kWrite) continue;
           if (con_type & Connecter::kRead) break;
-          else if (con_type == Connecter::kOutTime 
+          if (con_type == Connecter::kOutTime
               && time_pack_pre + std::chrono::seconds(3) <= std::chrono::system_clock::now()) {
               break;
           }
