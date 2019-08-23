@@ -4,7 +4,6 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <unistd.h>
-#include <unistd.h>
 #include <fcntl.h>
 
 static void SetNoBlock(int sockfd) {

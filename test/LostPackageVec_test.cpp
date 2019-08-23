@@ -55,14 +55,14 @@ protected:
 
 TEST_F(TestLostPackageVec, TestRunning) {
   ASSERT_EQ(vec.isRunning(), false);
-  vec.RegestListenCallback(MockListenPackageCallback, con);
+  //vec.RegestListenCallback(MockListenPackageCallback, con);
   EXPECT_EQ(vec.isRunning(), true);
 }
 
 TEST_F(TestLostPackageVec, TestListenLostPackCallback) {
   ASSERT_EQ(vec.isRunning(), false);
   con.set_buf(nullptr, -1);
-  vec.RegestListenCallback(ListenLostPackageCallback, con);
+  //vec.RegestListenCallback(ListenLostPackageCallback, con);
   EXPECT_EQ(vec.isRunning(), true);
   auto res = vec.GetFileLostedPackage(1000);
   EXPECT_EQ(res.size(), 1000);
@@ -70,7 +70,7 @@ TEST_F(TestLostPackageVec, TestListenLostPackCallback) {
   proto.set_type(Proto::kReSend);
   proto.set_package_number(1);
   con.set_buf(proto.buf(), proto.get_send_len());
-  vec.NoticeRead();
+  //vec.NoticeRead();
   usleep(10);
   res = vec.GetFileLostedPackage(1000);
   ASSERT_EQ(vec.isRunning(), true);

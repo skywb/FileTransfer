@@ -24,21 +24,6 @@ public:
   //添加一个丢失记录
   void AddFileLostedRecord(int package_num);
 
-  //void NoticeRead() {
-  //  std::unique_lock<std::mutex> lock(recv_lock_);
-  //  recv_cond_.notify_one();
-  //}
-  //void RegestListenCallback(void func(LostPackageVec& , Connecter& ), Connecter& con) {
-  //  std::thread th(func, std::ref(*this), std::ref(con));
-  //  listen_thread_.swap(th);
-  //  std::lock_guard<std::mutex> lock(running_lock_);
-  //  running_ = true;
-  //}
-  //bool WaitRecvable(std::chrono::time_point<std::chrono::system_clock> time) {
-  //  std::unique_lock<std::mutex> lock(recv_lock_);
-  //  if (std::cv_status::timeout == recv_cond_.wait_until(lock, time)) return false;
-  //  return true;
-  //}
   bool isRunning();
   void ExitRunning() {
     std::lock_guard<std::mutex> lock(running_lock_);

@@ -22,7 +22,8 @@
  * 从lost中获取需要重发的数据包号， 并发送
  * 根据文件接收状态设置File的stat
  */
-static void SendFileDataCallback(Connecter& con, LostPackageVec& lost, std::unique_ptr<File>& file_uptr) {
+static void SendFileDataCallback(Connecter& con,
+    LostPackageVec& lost, std::unique_ptr<File>& file_uptr) {
   int max_send_pack = 1;
   while (lost.isRunning()) {
     auto res = lost.GetFileLostedPackage(1000);
